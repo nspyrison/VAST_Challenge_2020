@@ -1,7 +1,19 @@
 # VAST Challenge 2020
 
 Challenge homepage: https://vast-challenge.github.io/2020/index.html
+2020 submission: https://vast-challenge.github.io/2020/Submissions.html
 Team repo homepage: https://github.com/nspyrison/VAST_Challenge_2020/
+
+## If you wish to be a contributor let Nick know. Git rules:
+- Replicate the `./Data/` structure described in `./Data_readme.md`.
+- Pull whenever you start working.
+- Pull whenever you are ready to commit.
+- Push early and often!
+- If you run into a git issue and have any doubts on what to do, seek advice within the other contributors.
+
+## Notes about VAST Challenge 2020
+- MC1:3 released 04 April 2020
+- submissions due July 14, 2020 at 11:59 pm Pacific Daylight Time (UTC/GMT -9 hours). (duration: 2months, 10 days)
 
 ## Notes about VAST Challenge 2019
 - https://vast-challenge.github.io/2019/submissions.html
