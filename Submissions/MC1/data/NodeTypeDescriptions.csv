@@ -1,0 +1,6 @@
+NodeType,Description,Used in
+1,Person,Used in all channels
+2,Product category,"For procurements, etype = 3"
+3,Document,"For the co-authorship graph, etype = 4"
+4,Financial category,"For financial demographics, etype = 5"
+5,Country,"For travel, etype = 6"
