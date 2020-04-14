@@ -15,15 +15,15 @@ ggraph(graph) +
   geom_edge_link(aes(colour = factor(year))) + 
   geom_node_point()
 
-# # add a layout 'kk'
-# ggraph(graph, layout = 'kk') + 
-#   geom_edge_link(aes(colour = factor(year))) + 
-#   geom_node_point()
-# 
-# # add parameter maxiter, (specific to layout?)
-# ggraph(graph, layout = 'kk', maxiter = 100) + 
-#   geom_edge_link(aes(colour = factor(year))) + 
-#   geom_node_point()
+# add a layout 'kk'
+ggraph(graph, layout = 'kk') +
+  geom_edge_link(aes(colour = factor(year))) +
+  geom_node_point()
+
+# add parameter maxiter, (specific to layout?)
+ggraph(graph, layout = 'kk', maxiter = 100) +
+  geom_edge_link(aes(colour = factor(year))) +
+  geom_node_point()
 
 # layout drl, can return layout as an obj
 layout <- create_layout(graph, layout = 'drl')
