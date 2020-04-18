@@ -1,8 +1,10 @@
 library(tictoc); library(beepr); library(tidyverse)
 
-do_run_sample_data  <- T
-do_run_sizable_data <- F
-filepath <- "./Data/MC1 Data/CGCS-GraphData.csv" ## 123.9 million obs x 11 var
+do_run_sample_data   <- T
+do_run_sizable_data  <- F
+# do_run_template_data <- T
+# do_run_suspect_data  <- T
+data_filepath <- "./Data/MC1 Data/CGCS-GraphData.csv" ## full data, 123.9 million obs x 11 var
 if (do_run_sizable_data == T) {
   rowsPerSlice <- 21000000 ## Number of obs to include in each slice
   nSlices <- 6 ## Number of data slices to load, 
@@ -10,7 +12,7 @@ if (do_run_sizable_data == T) {
 
 ### LOAD SAMPLE DATA =====
 if (do_run_sample_data == T){
-    samp <- read.csv2(filepath, ## Read first 10000 rows
+    samp <- read.csv2(data_filepath, ## Read first 10000 rows
                       sep = (","),
                       header = T, 
                       check.names = T, 
@@ -36,11 +38,12 @@ if (do_run_sizable_data == T){
   warning("Going to read a 5.9 GB csv into ram.")
   ## Full sample is more than 123 million rows of 11 var, break into 6 slides of 21 million obs?
   
+  beep(0)
+  tic("Reading full dataset")
   for (i in 1:nSlices) {
-    beep()
-    tic(paste0("Read data for the: ", i, "-th 21 million rows and append."))
+    tic(paste0("Read data for data slice ", i, "(read and append n-th 21 million rows)"))
     .head <- if (i == 1) T else F
-    .dat <- read.csv2(filepath, 
+    .dat <- read.csv2(data_filepath, 
                       sep = (","),
                       header = .head, 
                       check.names = T, 
@@ -51,11 +54,13 @@ if (do_run_sizable_data == T){
     )
     ## .dat$Time <- lubridate::as_datetime(.dat$Time) 
     ## warning("this seems to cause a hang for 21 million obs slices.")
-    cbind(dat, .dat)
+    rbind(dat, .dat)
     rm(.dat)
     toc() ## tooks ~61sec on ns Dell laptop for first 21 million row slice.
-    beep()
+    beep(i)
   }
+  beep(4)
+  toc()
   
   summary(dat1)
   message("not all source and target locations are NA, ")
@@ -82,8 +87,8 @@ eType_tbl <-
                                "duration [days]")
   )
 
-demographic_tbl_filepath <- "./Submissions/MC1/data/DemographicCategories.csv" ## 123.9 million obs x 11 var
-demographic_tbl <- read.csv2(demographic_tbl_filepath, 
+demographic_filepath <- "./Submissions/MC1/data/DemographicCategories.csv"
+demographic_tbl <- read.csv2(demographic_filepath, 
                      sep = (","),
                      header = T, 
                      check.names = T, 
@@ -92,7 +97,39 @@ demographic_tbl <- read.csv2(demographic_tbl_filepath,
 )
 demographic_tbl <- select(demographic_tbl, 
                           Target = NodeID, 
-                          DemographicCategory = Category)
+                          TargetDemographicCategory = Category)
+
+nodeType_graphdata_filepath   <- "./Submissions/MC1/data/CGCS-GraphData-NodeTypes.csv"
+#nodeType_template_filepath    <- "./Submissions/MC1/data/CGCS-Template-NodeTypes.csv"
+nodeType_description_filepath <- "./Submissions/MC1/data/NodeTypeDescriptions.csv"
+nodeType_graphdata <- read.csv2(nodeType_graphdata_filepath, ## A superset of the template.
+                                sep = (","),
+                                header = T, 
+                                check.names = T, 
+                                stringsAsFactors = F,
+                                na.strings = ""
+)
+nodeType_description <- read.csv2(nodeType_description_filepath, 
+                                  sep = (","),
+                                  header = T, 
+                                  check.names = T, 
+                                  stringsAsFactors = F,
+                                  na.strings = ""
+)
+nodeType_tbl <- left_join(nodeType_graphdata, nodeType_description, by = "NodeType")
+nodeType_tbl_Source <- select(nodeType_tbl,
+                              Source = NodeID,
+                              SourceNodeType = NodeType,
+                              SourceDescription = Description,
+                              SourceNodeTypeUsedIn = Used.in
+)
+nodeType_tbl_Target <- select(nodeType_tbl,
+                              Target = NodeID,
+                              TargetNodeType = NodeType,
+                              TargetDescription = Description,
+                              TargetNodeTypeUsedIn = Used.in
+)
+
 
 ### FORMATING FUNCTIONS =====
 ns_format_df <- function(dat){
@@ -100,25 +137,33 @@ ns_format_df <- function(dat){
   dat$Datetime = lubridate::as_datetime(dat$Time) + lubridate::years(55)
   dat <- left_join(dat, eType_tbl, by = "eType")
   dat <- left_join(dat, demographic_tbl, by = "Target")
+  dat <- left_join(dat, nodeType_tbl_Source, by = "Source")
+  dat <- left_join(dat, nodeType_tbl_Target, by = "Target")
   
   ## reordered, esp for: 'to' and 'from' first.
-  dat <- 
-    select(dat, 
-           Source, 
-           Target,
-           Datetime,
-           ## POSIXt ("Unix timestamps"), but shifted 55 years forward from 1970 to 2025 indexing
-           Seconds = Time, ## Relative to 2025 Jan 1.
-           eType, 
-           eName,
-           Weight,
-           Weight_unit,
-           SourceLocation,
-           SourceLatitude,
-           SourceLongitude,
-           TargetLocation,
-           TargetLatitude,
-           TargetLongitude)
+  dat <- select(dat, 
+                Source, 
+                Target,
+                Datetime,
+                ## POSIXt ("Unix timestamps"), but shifted 55 years forward from 1970 to 2025 indexing
+                Second = Time, ## Relative to 2025 Jan 1.
+                eType, 
+                eName,
+                Weight,
+                Weight_unit,
+                SourceNodeType,
+                SourceDescription,
+                SourceNodeTypeUsedIn,
+                SourceLocation,
+                SourceLatitude,
+                SourceLongitude,
+                TargetNodeType,
+                TargetDescription,
+                TargetNodeTypeUsedIn,
+                TargetDemographicCategory,
+                TargetLocation,
+                TargetLatitude,
+                TargetLongitude)
   
   ## return tibble (1 row is 1 edges of the network)
   as_tibble(dat)
@@ -164,8 +209,8 @@ if(do_run_sample_data == T){
   
   ## tsne sample:
   requireNamespace("Rtsne")
-  tsne_edges <- select(ssamp,
-                       Seconds,
+  tsne_edges <- select(.ssamp,
+                       Second,
                        eType,
                        Weight,
                        SourceLocation,
