@@ -60,11 +60,11 @@ nodeType_graphdata <- read.csv2(nodeType_graphdata_filepath,
                                 na.strings = ""
 )
 nodeType_template <- read.csv2(nodeType_template_filepath, 
-                               sep = (","),
-                               header = T, 
-                               check.names = T, 
-                               stringsAsFactors = F,
-                               na.strings = ""
+                                sep = (","),
+                                header = T, 
+                                check.names = T, 
+                                stringsAsFactors = F,
+                                na.strings = ""
 )
 nodeType_union <- union(nodeType_graphdata, nodeType_template)
 nodeType_description <- read.csv2(nodeType_description_filepath, 
@@ -150,35 +150,7 @@ ns_format_tsne_obj <- function(tsne_input, tsne_output){
 }
 
 
-### LOAD SAMPLE DATA =====
-if (do_run_sample_data == T){
-    samp <- read.csv2(data_filepath, ## Read first 10000 rows
-                      sep = (","),
-                      header = T, 
-                      check.names = T, 
-                      stringsAsFactors = F,
-                      na.strings = "",
-                      nrows = 10000)
-    samp$DataSource <- "Sample"
-    
-    samp <- ns_format_df(samp)
-    
-    samp
-    message("Note 10000 NA's in last 4 columns.")
-    message("Time is negative int ( on order -1E9), doesn't look like a concat of granularities.
-        Google-foo suggests Unix time (POSIX time), or 'the number of 
-        seconds that have passed since 00:00:00 UTC Thursday, 1 January 1970' ")
-    
-    message("Seems to be many 16:00 hr, might be able to infer a timezone from this") 
-    
-    broom::glance(samp) ## na.fraction: .545 = 6/11, good
-    skimr::skim(samp)
-    
-}
-
-
 ### LOAD TEMPLATE AND SUSPECTS =====
-
 if (do_run_templateSuspect_data == T) {
   template_filepath <- "./Submissions/MC1/data/CGCS-Template.csv"
   suspect_filepath_vect
@@ -212,65 +184,52 @@ if (do_run_templateSuspect_data == T) {
 }
 
 
-### LOAD FULL DATA =====
-## On to a real slice
-dat <- NULL
-if (do_run_sizable_data == T){
-  warning("Going to read a 5.9 GB csv into ram.")
-  ## Full sample is more than 123 million rows of 11 var, break into 6 slides of 21 million obs?
+### TEMPLATE-SUSPECT NEWTWORK VIS =====
+if(do_run_templateSuspect_data == T){
+  library(ggraph); library(igraph)
+  .dat <- dat_templateSuspect
   
-  beep(0)
-  tic("Reading full dataset")
-  for (i in 1:nSlices) {
-    tic(paste0("Read data for data slice ", i, "(read and append n-th 21 million rows)"))
-    .head <- if (i == 1) T else F
-    .dat <- read.csv2(data_filepath, 
-                      sep = (","),
-                      header = .head, 
-                      check.names = T, 
-                      stringsAsFactors = F,
-                      na.strings = "",
-                      nrows = rowsPerSlice,
-                      skip = (i - 1) * rowsPerSlice
-    )
-    .dat$DataSource <- paste0("Full, slice ", i)
-    rbind(dat, .dat)
-    rm(.dat)
-    toc() ## tooks ~61sec on ns Dell laptop for first 21 million row slice.
-    beep(i)
-  }
-  beep(4)
-  toc()
+  message("Scope of data:")
+  summary(.dat[c("eType", "Datetime", "DataSource")])
+  table(.dat[c("eName","DataSource")])
   
-  summary(dat)
-  message("not all source and target locations are NA, ")
-  broom::glance(dat) ## na.fraction = .241  less than 3/11 = .2727
-  skimr::skim(dat) ## Histograms for time and source look promising.
-}
-
-
-
-
-
-### SAMPLE NEWTWORK VIS =====
-
-library(ggraph); library(igraph)
-if(do_run_sample_data == T){
+  .g_dat <- ns_df2network(.dat)
+  .lay   <- create_layout(.g_dat, layout = "fr")
+  ## alt: try; layout = 'kk', circular = F
+  .lay$name <- as.integer(.lay$name)
+  .lay_lj   <- left_join(.lay, nodeType_tbl, by = c("name" = "NodeID"))
+  .lay$nType   <- .lay_lj$NodeType
+  .lay$nName   <- .lay_lj$Description
+  .lay$nUsedIn <- .lay_lj$Used.in
+  #str(.lay) ## Good, kept attributes.
   
-  summary(samp[c("eType", "Datetime", "Weight")])
-  
-  .ssamp <- samp[samp$Weight > .24,]
-  .g_ssamp <- ns_df2network(.ssamp)
   
   ## ggraph sample
-  tic("ggraph, layout = 'kk', circular = F")
-  ggraph(.g_ssamp, layout = 'kk', circular = F) + 
-    geom_edge_link(alpha  = .33, aes(color = eType, fill = eType)) + 
-    geom_node_point(alpha = .3)
-  toc()
-  
-  ## tsne sample:
-  requireNamespace("Rtsne")
+  .alp <- .35
+  tic("ggraph on .lay")
+  ggraph(.lay) + 
+    ## Edges:
+    geom_edge_link(aes(color = eName),
+                   alpha = .alp, 
+                   arrow = arrow(length = unit(2, 'mm')), 
+                   end_cap = circle(2, 'mm')
+    ) + 
+    ## Nodes:
+    geom_node_point(alpha = .alp,
+                    size = 1.5,
+                    aes(shape = nName,
+                        color = nName,
+                        fill  = nName)
+    ) +
+    facet_grid(DataSource~eName) +
+    theme_graph()
+  toc() ## ~ 
+}
+ 
+ 
+### SAMPLE EDGES tSNE =====
+if(do_run_templateSuspect_data == T){
+  library("Rtsne")
   tsne_edges <- select(.ssamp,
                        Second,
                        eType,
@@ -286,7 +245,6 @@ if(do_run_sample_data == T){
   tsne_edges[is.na(tsne_edges)] <- -99 
   message("Make sure -99 isn't going to mess with data with locations")
   
-  ### SAMPLE EDGES tSNE =====
   tsne_obj <- Rtsne::Rtsne(tsne_edges, dims = 2, 
                           perplexity = 1 / 3 * sqrt(nrow(tsne_edges)), 
                           max_iter = 500, 
