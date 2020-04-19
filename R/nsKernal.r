@@ -1,72 +1,22 @@
+### Nicholas Spyrison for VAST Challenge 2020 MC1
+### April 2020
+
+
+##### PREAMBLE =====
 library(tictoc); library(beepr); library(tidyverse)
 
 do_run_sample_data   <- T
 do_run_sizable_data  <- F
-# do_run_template_data <- T
-# do_run_suspect_data  <- T
+do_run_templateSuspect_data <- T
+do_run_ggraph_examples <- F
 data_filepath <- "./Data/MC1 Data/CGCS-GraphData.csv" ## full data, 123.9 million obs x 11 var
+template_filepath <- "./Submissions/MC1/data/CGCS-Template.csv"
+suspect_filepath_vect <- paste0("./Submissions/MC1/data/Q1-Graph", 1:5, ".csv")
 if (do_run_sizable_data == T) {
   rowsPerSlice <- 21000000 ## Number of obs to include in each slice
   nSlices <- 6 ## Number of data slices to load, 
 }
 
-### LOAD SAMPLE DATA =====
-if (do_run_sample_data == T){
-    samp <- read.csv2(data_filepath, ## Read first 10000 rows
-                      sep = (","),
-                      header = T, 
-                      check.names = T, 
-                      stringsAsFactors = F,
-                      na.strings = "",
-                      nrows = 10000)
-    as_tibble(samp)
-    message("Note 10000 NA's in last 4 columns.")
-    message("Time is negative int ( on order -1E9), doesn't look like a concat of granularities.
-        Google-foo suggests Unix time (POSIX time), or 'the number of 
-        seconds that have passed since 00:00:00 UTC Thursday, 1 January 1970' ")
-    
-    message("Seems to be many 16:00 hr, might be able to infer a timezone from this") 
-    
-    broom::glance(samp) ## na.fraction: .545 = 6/11, good
-    skimr::skim(samp)
-}
-
-### LOAD FULL DATA =====
-## On to a real slice
-dat <- NULL
-if (do_run_sizable_data == T){
-  warning("Going to read a 5.9 GB csv into ram.")
-  ## Full sample is more than 123 million rows of 11 var, break into 6 slides of 21 million obs?
-  
-  beep(0)
-  tic("Reading full dataset")
-  for (i in 1:nSlices) {
-    tic(paste0("Read data for data slice ", i, "(read and append n-th 21 million rows)"))
-    .head <- if (i == 1) T else F
-    .dat <- read.csv2(data_filepath, 
-                      sep = (","),
-                      header = .head, 
-                      check.names = T, 
-                      stringsAsFactors = F,
-                      na.strings = "",
-                      nrows = rowsPerSlice,
-                      skip = (i - 1) * rowsPerSlice
-    )
-    ## .dat$Time <- lubridate::as_datetime(.dat$Time) 
-    ## warning("this seems to cause a hang for 21 million obs slices.")
-    rbind(dat, .dat)
-    rm(.dat)
-    toc() ## tooks ~61sec on ns Dell laptop for first 21 million row slice.
-    beep(i)
-  }
-  beep(4)
-  toc()
-  
-  summary(dat1)
-  message("not all source and target locations are NA, ")
-  broom::glance(dat1) ## na.fraction = .241  less than 3/11 = .2727
-  skimr::skim(dat1) ## Histograms for time and source look promising.
-}
 
 ### LOOKUP TABLES =====
 eType_tbl <- 
@@ -89,11 +39,11 @@ eType_tbl <-
 
 demographic_filepath <- "./Submissions/MC1/data/DemographicCategories.csv"
 demographic_tbl <- read.csv2(demographic_filepath, 
-                     sep = (","),
-                     header = T, 
-                     check.names = T, 
-                     stringsAsFactors = F,
-                     na.strings = ""
+                             sep = (","),
+                             header = T, 
+                             check.names = T, 
+                             stringsAsFactors = F,
+                             na.strings = ""
 )
 demographic_tbl <- select(demographic_tbl, 
                           Target = NodeID, 
@@ -140,10 +90,11 @@ ns_format_df <- function(dat){
   dat <- left_join(dat, nodeType_tbl_Source, by = "Source")
   dat <- left_join(dat, nodeType_tbl_Target, by = "Target")
   
-  ## reordered, esp for: 'to' and 'from' first.
+  ## reordered, esp for: 'to/Source' and 'from/Target' first.
   dat <- select(dat, 
                 Source, 
                 Target,
+                DataSource,
                 Datetime,
                 ## POSIXt ("Unix timestamps"), but shifted 55 years forward from 1970 to 2025 indexing
                 Second = Time, ## Relative to 2025 Jan 1.
@@ -189,6 +140,109 @@ ns_format_tsne_obj <- function(tsne_input, tsne_output){
          Weight_unit = decoded_input$Weight_unit
   )
 }
+
+
+### LOAD SAMPLE DATA =====
+if (do_run_sample_data == T){
+    samp <- read.csv2(data_filepath, ## Read first 10000 rows
+                      sep = (","),
+                      header = T, 
+                      check.names = T, 
+                      stringsAsFactors = F,
+                      na.strings = "",
+                      nrows = 10000)
+    samp$DataSource <- "Sample"
+    
+    samp <- ns_format_df(samp)
+    
+    samp
+    message("Note 10000 NA's in last 4 columns.")
+    message("Time is negative int ( on order -1E9), doesn't look like a concat of granularities.
+        Google-foo suggests Unix time (POSIX time), or 'the number of 
+        seconds that have passed since 00:00:00 UTC Thursday, 1 January 1970' ")
+    
+    message("Seems to be many 16:00 hr, might be able to infer a timezone from this") 
+    
+    broom::glance(samp) ## na.fraction: .545 = 6/11, good
+    skimr::skim(samp)
+    
+}
+
+
+### LOAD TEMPLATE AND SUSPECTS =====
+
+if (do_run_templateSuspect_data == T) {
+  template_filepath <- "./Submissions/MC1/data/CGCS-Template.csv"
+  suspect_filepath_vect
+  dat_templateSuspect <- read.csv2(template_filepath, 
+                                   sep = (","),
+                                   header = T, 
+                                   check.names = T, 
+                                   stringsAsFactors = F,
+                                   na.strings = "",
+  )
+  dat_templateSuspect$DataSource <- "Template"
+
+  for (i in 1:length(suspect_filepath_vect)){
+    .dat <- read.csv2(suspect_filepath_vect[i], 
+                      sep = (","),
+                      header = T, 
+                      check.names = T, 
+                      stringsAsFactors = F,
+                      na.strings = "",
+    )
+    .dat$DataSource <- paste0("Suspect", i)
+    dat_templateSuspect <- rbind(dat_templateSuspect, .dat)
+  }
+  
+  dat_templateSuspect <- ns_format_df(dat_templateSuspect)
+  table(dat_templateSuspect$DataSource)
+  
+  
+  dat_templateSuspect
+  skimr::skim(dat_templateSuspect)
+}
+
+
+### LOAD FULL DATA =====
+## On to a real slice
+dat <- NULL
+if (do_run_sizable_data == T){
+  warning("Going to read a 5.9 GB csv into ram.")
+  ## Full sample is more than 123 million rows of 11 var, break into 6 slides of 21 million obs?
+  
+  beep(0)
+  tic("Reading full dataset")
+  for (i in 1:nSlices) {
+    tic(paste0("Read data for data slice ", i, "(read and append n-th 21 million rows)"))
+    .head <- if (i == 1) T else F
+    .dat <- read.csv2(data_filepath, 
+                      sep = (","),
+                      header = .head, 
+                      check.names = T, 
+                      stringsAsFactors = F,
+                      na.strings = "",
+                      nrows = rowsPerSlice,
+                      skip = (i - 1) * rowsPerSlice
+    )
+    .dat$DataSource <- paste0("Full, slice ", i)
+    rbind(dat, .dat)
+    rm(.dat)
+    toc() ## tooks ~61sec on ns Dell laptop for first 21 million row slice.
+    beep(i)
+  }
+  beep(4)
+  toc()
+  
+  summary(dat)
+  message("not all source and target locations are NA, ")
+  broom::glance(dat) ## na.fraction = .241  less than 3/11 = .2727
+  skimr::skim(dat) ## Histograms for time and source look promising.
+}
+
+
+
+
 
 ##### VIS
 
@@ -249,8 +303,8 @@ if(do_run_sample_data == T){
 }
   
 ### GGRAPH EXAMPLES =====
-## FROM ./R/zGgraph.r
-if (F) {
+## excerpt from ./R/zGgraph.r
+if (do_run_ggraph_examples == T) {
   graph <- graph_from_data_frame(highschool)
   
   # Not specifying the layout - defaults to "auto"
