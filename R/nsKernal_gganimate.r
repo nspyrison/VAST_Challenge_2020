@@ -6,146 +6,173 @@
 library(tictoc); library(beepr); library(tidyverse); library(lubridate)
 
 do_run_sample_data   <- T
-do_run_sizable_data  <- F
+#do_run_sizable_data  <- F ## See nsKernal.r for full set consumption
 do_run_templateSuspect_data <- T
-do_run_ggraph_examples <- F
+do_run_ggraph <- T
+do_run_gganimate <- T
+do_run_tsne <- F
 
 .template_filepath <- "./Submissions/MC1/data/CGCS-Template.csv"
 .suspect_filepath_vect <- paste0("./Submissions/MC1/data/Q1-Graph", 1:5, ".csv")
-if (do_run_sizable_data == T) {
-  rowsPerSlice <- 21000000 ## Number of obs to include in each slice
-  nSlices <- 6 ## Number of data slices to load, 
-}
 
 
 ### LOOKUP TABLES =====
-eType_tbl <- 
-  data.frame("eType" = 0:6,
-             "eName" = c("phone",
-                         "email",
-                         "sell",
-                         "purchase",
-                         "co-authorship",
-                         "demographic, financial",
-                         "travel"),
-             "Weight_unit" = c("count",
-                               "count",
-                               "value",
-                               "value",
-                               "authorship fraction",
-                               "value",
-                               "duration [days]")
+if (T) {
+  eType_tbl <- 
+    data.frame("eType" = 0:6,
+               "eName" = c("phone",
+                           "email",
+                           "sell",
+                           "purchase",
+                           "co-authorship",
+                           "demographic, financial",
+                           "travel"),
+               "Weight_unit" = c("count",
+                                 "count",
+                                 "value",
+                                 "value",
+                                 "authorship fraction",
+                                 "value",
+                                 "duration [days]")
+    )
+  
+  .demographic_filepath <- "./Submissions/MC1/data/DemographicCategories.csv"
+  demographic_tbl <- read.csv2(.demographic_filepath, 
+                               sep = (","),
+                               header = T, 
+                               check.names = T, 
+                               stringsAsFactors = F,
+                               na.strings = ""
   )
-
-.demographic_filepath <- "./Submissions/MC1/data/DemographicCategories.csv"
-demographic_tbl <- read.csv2(.demographic_filepath, 
-                             sep = (","),
-                             header = T, 
-                             check.names = T, 
-                             stringsAsFactors = F,
-                             na.strings = ""
-)
-demographic_tbl <- select(demographic_tbl, 
-                          Target = NodeID, 
-                          TargetDemographicCategory = Category)
-
-.nodeType_graphdata_filepath   <- "./Submissions/MC1/data/CGCS-GraphData-NodeTypes.csv"
-.nodeType_template_filepath    <- "./Submissions/MC1/data/CGCS-Template-NodeTypes.csv"
-.nodeType_description_filepath <- "./Submissions/MC1/data/NodeTypeDescriptions.csv"
-.nodeType_graphdata <- read.csv2(.nodeType_graphdata_filepath, 
-                                sep = (","),
-                                header = T, 
-                                check.names = T, 
-                                stringsAsFactors = F,
-                                na.strings = ""
-)
-.nodeType_template <- read.csv2(.nodeType_template_filepath, 
-                                sep = (","),
-                                header = T, 
-                                check.names = T, 
-                                stringsAsFactors = F,
-                                na.strings = ""
-)
-.nodeType_union <- dplyr::union(.nodeType_graphdata, .nodeType_template)
-.nodeType_description <- read.csv2(.nodeType_description_filepath, 
+  demographic_tbl <- select(demographic_tbl, 
+                            Target = NodeID, 
+                            TargetDemographicCategory = Category)
+  
+  .nodeType_graphdata_filepath   <- "./Submissions/MC1/data/CGCS-GraphData-NodeTypes.csv"
+  .nodeType_template_filepath    <- "./Submissions/MC1/data/CGCS-Template-NodeTypes.csv"
+  .nodeType_description_filepath <- "./Submissions/MC1/data/NodeTypeDescriptions.csv"
+  .nodeType_graphdata <- read.csv2(.nodeType_graphdata_filepath, 
+                                   sep = (","),
+                                   header = T, 
+                                   check.names = T, 
+                                   stringsAsFactors = F,
+                                   na.strings = ""
+  )
+  .nodeType_template <- read.csv2(.nodeType_template_filepath, 
                                   sep = (","),
                                   header = T, 
                                   check.names = T, 
                                   stringsAsFactors = F,
                                   na.strings = ""
-)
-nodeType_tbl <- left_join(.nodeType_union, .nodeType_description, by = "NodeType")
-.nodeType_tbl_Source <- select(nodeType_tbl,
-                              Source = NodeID,
-                              SourceNodeType = NodeType,
-                              SourceDescription = Description,
-                              SourceNodeTypeUsedIn = Used.in
-)
-.nodeType_tbl_Target <- select(nodeType_tbl,
-                              Target = NodeID,
-                              TargetNodeType = NodeType,
-                              TargetDescription = Description,
-                              TargetNodeTypeUsedIn = Used.in
-)
-
-
-### FORMATING FUNCTIONS =====
-ns_format_df <- function(dat){
-  dat$Weight <- as.numeric(dat$Weight) ## Was string of a numeric.
-  dat$Datetime = lubridate::as_datetime(dat$Time) + lubridate::years(55)
-  dat <- left_join(dat, eType_tbl, by = "eType")
-  dat <- left_join(dat, demographic_tbl, by = "Target")
-  dat <- left_join(dat, .nodeType_tbl_Source, by = "Source")
-  dat <- left_join(dat, .nodeType_tbl_Target, by = "Target")
-  dat[dat == -99] <- NA
-  
-  ## reordered, esp for: 'to/Source' and 'from/Target' first.
-  dat <- select(dat, 
-                Source, 
-                Target,
-                DataSource,
-                Datetime,
-                ## POSIXt ("Unix timestamps"), but shifted 55 years forward from 1970 to 2025 indexing
-                Second = Time, ## Relative to 2025 Jan 1.
-                eType, 
-                eName,
-                Weight,
-                Weight_unit,
-                SourceNodeType,
-                SourceDescription,
-                SourceNodeTypeUsedIn,
-                SourceLocation,
-                SourceLatitude,
-                SourceLongitude,
-                TargetNodeType,
-                TargetDescription,
-                TargetNodeTypeUsedIn,
-                TargetDemographicCategory,
-                TargetLocation,
-                TargetLatitude,
-                TargetLongitude)
-  
-  ## return tibble (1 row is 1 edges of the network)
-  as_tibble(dat)
-}
-
-ns_df2network <- function(dat){
-  requireNamespace("igraph")
-  .nodes <- union(unique(dat$Source), unique(dat$Target))
-  ## return network (igraph object)
-  igraph::graph_from_data_frame(dat, directed = TRUE, vertices = .nodes)
-} 
-
-ns_format_tsne_obj <- function(tsne_input, tsne_output){
-  decoded_input <- left_join(tsne_input, eType_tbl, by = "eType")
-  tibble(x = tsne_output$Y[, 1],
-         y = tsne_output$Y[, 2],
-         eType       = decoded_input$eType,
-         eName       = decoded_input$eName,
-         DataSource  = decoded_input$DataSource,
-         Weight      = decoded_input$Weight,
-         Weight_unit = decoded_input$Weight_unit
   )
+  .nodeType_union <- dplyr::union(.nodeType_graphdata, .nodeType_template)
+  .nodeType_description <- read.csv2(.nodeType_description_filepath, 
+                                     sep = (","),
+                                     header = T, 
+                                     check.names = T, 
+                                     stringsAsFactors = F,
+                                     na.strings = ""
+  )
+  nodeType_tbl <- left_join(.nodeType_union, .nodeType_description, by = "NodeType")
+  unique(nodeType_tbl$NodeID)
+  .nodeType_tbl_Source <- select(nodeType_tbl,
+                                 Source = NodeID,
+                                 SourceNodeType = NodeType,
+                                 SourceDescription = Description,
+                                 SourceNodeTypeUsedIn = Used.in
+  )
+  .nodeType_tbl_Target <- select(nodeType_tbl,
+                                 Target = NodeID,
+                                 TargetNodeType = NodeType,
+                                 TargetDescription = Description,
+                                 TargetNodeTypeUsedIn = Used.in
+  )
+  
+  
+  ### FORMATING FUNCTIONS =====
+  ns_format_df <- function(dat){
+    dat$Weight <- as.numeric(dat$Weight) ## Was string of a numeric.
+    dat$Datetime = lubridate::as_datetime(dat$Time) + lubridate::years(55)
+    dat <- left_join(dat, eType_tbl, by = "eType")
+    dat <- left_join(dat, demographic_tbl, by = "Target")
+    dat <- left_join(dat, .nodeType_tbl_Source, by = "Source")
+    dat <- left_join(dat, .nodeType_tbl_Target, by = "Target")
+    dat[dat == -99] <- NA
+    
+    ## reordered, esp for: 'to/Source' and 'from/Target' first.
+    dat <- select(dat, 
+                  Source, 
+                  Target,
+                  DataSource,
+                  Datetime,
+                  ## POSIXt ("Unix timestamps"), but shifted 55 years forward from 1970 to 2025 indexing
+                  Second = Time, ## Relative to 2025 Jan 1.
+                  eType, 
+                  eName,
+                  Weight,
+                  Weight_unit,
+                  SourceNodeType,
+                  SourceDescription,
+                  SourceNodeTypeUsedIn,
+                  SourceLocation,
+                  SourceLatitude,
+                  SourceLongitude,
+                  TargetNodeType,
+                  TargetDescription,
+                  TargetNodeTypeUsedIn,
+                  TargetDemographicCategory,
+                  TargetLocation,
+                  TargetLatitude,
+                  TargetLongitude)
+    
+    ## return tibble (1 row is 1 edges of the network)
+    as_tibble(dat)
+  }
+  
+  ns_df2network <- function(dat){
+    requireNamespace("igraph")
+    .nodes <- union(unique(dat$Source), unique(dat$Target))
+    ## return network (igraph object)
+    igraph::graph_from_data_frame(dat, directed = TRUE, vertices = .nodes)
+  } 
+  
+  ns_network2layout <- function(graph, 
+                                layout = 'fr', ## also try 'kk', (circular = F)
+                                circular = F, 
+                                decode_tbl = NULL,
+                                decode_tbl_id = "NodeID"){
+    if (!is.null(decode_tbl) & !("data.frame" %in% class(anim_df)) )
+      stop("decode_tbl should be a data.frame.")
+    
+    .lay   <- create_layout(.g_dat, layout = layout, circular = circular)
+    if (!is.na(as.integer(.lay$name)))
+      .lay$name <- as.integer(.lay$name)
+    
+    if (!is.null(decode_tbl)){
+      .lay_lj   <- left_join(.lay, decode_tbl, by = c("name" = decode_tbl_id)) 
+      ## decode_tbl_id is specific to decode_tbl, "name" is a layout default.
+      .lay$nType   <- .lay_lj$NodeType
+      .lay$nName   <- .lay_lj$Description
+      .lay$nUsedIn <- .lay_lj$Used.in
+    }
+    
+    ## Must keep layout attributes:
+    #str(.lay) ## Good, kept attributes
+    
+    return(.lay)
+  }
+  
+  ns_decode_tsne_obj <- function(tsne_input, tsne_output){
+    decoded_input <- left_join(tsne_input, eType_tbl, by = "eType")
+    tibble(x = tsne_output$Y[, 1],
+           y = tsne_output$Y[, 2],
+           eType       = decoded_input$eType,
+           eName       = decoded_input$eName,
+           DataSource  = decoded_input$DataSource,
+           Weight      = decoded_input$Weight,
+           Weight_unit = decoded_input$Weight_unit
+    )
+  }
 }
 
 
@@ -159,7 +186,7 @@ if (do_run_templateSuspect_data == T) {
                                    na.strings = "",
   )
   dat_templateSuspect$DataSource <- "Template"
-
+  
   for (i in 1:length(.suspect_filepath_vect)){
     .dat <- read.csv2(.suspect_filepath_vect[i], 
                       sep = (","),
@@ -181,7 +208,7 @@ if (do_run_templateSuspect_data == T) {
 
 
 ### TEMPLATE-SUSPECT NEWTWORK VIS =====
-if(do_run_templateSuspect_data == T){
+if(do_run_ggraph == T){
   library(ggraph); library(igraph)
   .dat <- dat_templateSuspect[dat_templateSuspect$SourceDescription == "Person", ]
   .dat <- .dat[.dat$DataSource %in% c("Template", "Suspect1"), ]
@@ -191,23 +218,22 @@ if(do_run_templateSuspect_data == T){
   # table(.dat[c("eName","DataSource")])
   
   
-  .g_dat <- ns_df2network(.dat)
-  .lay   <- create_layout(.g_dat, layout = "fr")
-  ## alt: try; layout = 'kk', circular = F
-  .lay$name <- as.integer(.lay$name)
-  .lay_lj   <- left_join(.lay, nodeType_tbl, by = c("name" = "NodeID"))
-  .lay$nType   <- .lay_lj$NodeType
-  .lay$nName   <- .lay_lj$Description
-  .lay$nUsedIn <- .lay_lj$Used.in
-  #str(.lay) ## Good, kept attributes.
+  .g_dat <- ns_df2network(dat = .dat)
+  ## want to find a vector of length 5697 giving eName/eType [1:6]
+  .lay   <- ns_network2layout(graph = .g_dat, 
+                              layout = "fr", 
+                              circular = F, 
+                              decode_tbl = nodeType_tbl,
+                              decode_tbl_id = "NodeID")
   
+  ## alt: try; layout = 'kk', circular = F
+  ##str(.lay) ## Good, kept attributes.
   ## For extending see:
   if (F)
     browseURL("http://users.dimi.uniud.it/~massimo.franceschet/ns/syllabus/make/ggraph/ggraph.html")
   
   ## ggraph sample
   .alp <- .35
-  tic("ggraph on .lay")
   ggraph(.lay) + 
     ## Edges:
     geom_edge_link(aes(color = eName),
@@ -220,39 +246,94 @@ if(do_run_templateSuspect_data == T){
                     size = 1.5,
                     aes(shape = nName,
                         color = nName,
-                        fill  = nName)
+                        fill  = nName,)
     ) +
-    facet_grid(DataSource~eName) +
+    #facet_graph(DataSource ~ eName) + 
+    ## this is the ggraph way to use facet_grid, but throws and error.
+    facet_grid(DataSource ~ eName) +
     th_foreground(foreground = 'grey', border = TRUE) + 
     theme_graph()
-  toc() ## ~ 
+  ggsave(filename = "layout_fr%02d.png",
+         path = file.path("./output/"),
+         plot = last_plot(),
+         device = "png",
+         units = "in",
+         width = 8,
+         height = 2)
+  
+  ### === Looking up ggraph functions let to this approach:
+
+  library(tidygraph)
+  gr <- as_tbl_graph(.dat)
+  #attributes(gr) ## notice at active == "nodes"
+  
+  ## add Node attributes
+  gr <- mutate(gr, name = as.integer(name))
+  gr <- left_join(gr, nodeType_tbl, c("name" = "NodeID"))
+  gr <- mutate(gr,
+               nType   = NodeType,
+               nName   = Description,
+               nUsedIn = Used.in,
+               nPopularity = as.character(cut(centrality_degree(mode = 'in'),
+                                              breaks = 5,
+                                              labels = paste0(c("1st",
+                                                                "2nd",
+                                                                "3rd",
+                                                                "4th",
+                                                                "5th"), " Quantile")))
+  )
+  
+  ggraph(gr) +
+    geom_edge_link(aes(color = eName),
+                   alpha = .alp, 
+                   arrow = arrow(length = unit(2, 'mm')), 
+                   end_cap = circle(2, 'mm')
+    ) + 
+    geom_node_point(alpha = .alp,
+                    size = 1.5,
+                    aes(shape = nName,
+                        color = nName,
+                        fill  = nName,)
+    ) +
+    #facet_graph(DataSource ~ eName)
+    facet_grid(DataSource ~ eName) +
+    th_foreground(foreground = 'grey', border = TRUE) + 
+    theme_graph()
+  ggsave(filename = "gr%02d.png",
+         path = file.path("./output/"),
+         plot = last_plot(),
+         device = "png",
+         units = "in",
+         width = 8,
+         height = 2)
+
 }
 
-### Template-Suspect gganimate
-if(do_run_templateSuspect_data == T){
+### TEMPLATE-SUSPECT GGANIMATE =====
+if(do_run_gganimate == T){
   .dat <- dat_templateSuspect
   
-  node_long_tbl <- .dat[, 1:9]
-  node_long_tbl <- 
-    pivot_longer(node_long_tbl,
+  node_long_df <- .dat[, 1:9]
+  node_long_df <- .dat
+  node_long_df <- 
+    pivot_longer(node_long_df,
                  cols = Source:Target,
                  names_to = "Direction",
                  values_to = "NodeID"
     )
-  node_long_tbl[node_long_tbl == -99] <- NA
-  node_long_tbl <- mutate(node_agg_tbl, Weight_sign = ifelse(Direction == "Source", -1, 1))
-  node_long_tbl <- left_join(node_long_tbl, nodeType_tbl, by = "NodeID")
-  node_long_tbl <- select(node_long_tbl,
-                          DataSource,
-                          Datetime,
-                          eName,
-                          NodeID,
-                          NodeDescription = Description,
-                          NodeUsedIn = Used.in,
-                          Direction,
-                          Weight,
-                          Weight_sign,
-                          Weight_unit
+  node_long_df <- mutate(node_long_df, Weight_sign = ifelse(Direction == "Source", -1, 1))
+  node_long_df <- left_join(node_long_df, nodeType_tbl, by = "NodeID")
+  node_long_df <- select(node_long_df,
+                         DataSource,
+                         Datetime,
+                         eName,
+                         NodeID,
+                         NodeDescription = Description,
+                         NodeUsedIn = Used.in,
+                         Direction,
+                         Weight,
+                         Weight_sign,
+                         Weight_unit
   )
   
   frame_str <- data.frame(frame = 1:36, 
@@ -267,7 +348,7 @@ if(do_run_templateSuspect_data == T){
   .n <- nrow(frame_str)
   anim_df <- NULL
   for (i in 1:.n) {
-    .sub <- node_long_tbl
+    .sub <- node_long_df
     .sub <- .sub[.sub$Datetime <= frame_str$periodEndDate[i], ]
     
     .row <- 
@@ -284,18 +365,21 @@ if(do_run_templateSuspect_data == T){
   }
   anim_df <- as_tibble(anim_df)
   
-  ggplot2::geom_point( 
-    data = data_slides,
-    shape = pch, color = col, fill = col, size = cex, alpha = alpha,
-    mapping = ggplot2::aes(x = x, y = y, frame = slide)
-  )
+  # ggplot() +
+  #   ggplot2::geom_point(data = anim_df,
+  #                       size = 2, alpha = .3,
+  #                       mapping = ggplot2::aes(x = x, y = y, 
+  #                                              shape = eName, 
+  #                                              color = eName, fill = eName, 
+  #                                              frame = frame)
+  # )
 }
   
   
 
 
 ### TEMPLATE-SUSPECT EDGES tSNE =====
-if(do_run_templateSuspect_data == T){
+if(do_run_tsne == T){
   library("Rtsne")
   .dat <- dat_templateSuspect
   .dat <- .dat[.dat$DataSource %in% c("Template", "Suspect1"), ]
@@ -326,7 +410,7 @@ if(do_run_templateSuspect_data == T){
                           theta = .5  ## [0, 1] increases speed at expense of accuracy
   )
 
-  f_tsne_obj <- ns_format_tsne_obj(tsne_edges, tsne_obj)
+  f_tsne_obj <- ns_decode_tsne_obj(tsne_edges, tsne_obj)
 
   ggplot(f_tsne_obj) +
     geom_point(
@@ -341,39 +425,4 @@ if(do_run_templateSuspect_data == T){
     theme(legend.position = "bottom")
 }
 
-# ### GGRAPH EXAMPLES =====
-# ## excerpt from ./R/zGgraph.r
-# if (do_run_ggraph_examples == T) {
-#   graph <- graph_from_data_frame(highschool)
-#   
-#   # Not specifying the layout - defaults to "auto"
-#   ggraph(graph) + 
-#     geom_edge_link(aes(colour = factor(year))) + 
-#     geom_node_point()
-#   
-#   # add a layout 'kk'
-#   ggraph(graph, layout = 'kk') +
-#     geom_edge_link(aes(colour = factor(year))) +
-#     geom_node_point()
-#   
-#   # add parameter maxiter, (specific to layout?)
-#   ggraph(graph, layout = 'kk', maxiter = 100) +
-#     geom_edge_link(aes(colour = factor(year))) +
-#     geom_node_point()
-#   
-#   # layout drl, can return layout as an obj
-#   layout <- create_layout(graph, layout = 'drl')
-#   # A coord diagram
-#   ggraph(graph, layout = 'linear', circular = TRUE) + 
-#     geom_edge_arc(aes(colour = factor(year)))
-#   
-#   graph <- graph_from_data_frame(flare$edges, vertices = flare$vertices)
-#   
-#   # An icicle plot
-#   ggraph(graph, 'partition') + 
-#     geom_node_tile(aes(fill = depth), size = 0.25)
-#   
-#   # A sunburst plot
-#   ggraph(graph, 'partition', circular = TRUE) + 
-#     geom_node_arc_bar(aes(fill = depth), size = 0.25)
-# }
+
