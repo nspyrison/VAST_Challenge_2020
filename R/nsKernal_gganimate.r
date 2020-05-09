@@ -348,20 +348,49 @@ if(do_run_gganimate == T){
   .n <- nrow(frame_str)
   anim_df <- NULL
   for (i in 1:.n) {
-    .sub <- node_long_df
-    .sub <- .sub[.sub$Datetime <= frame_str$periodEndDate[i], ]
+    sub <- node_long_df
+    sub <- sub[sub$Datetime <= frame_str$periodEndDate[i], ]
     
-    .row <- 
-      group_by(.sub, DataSource, NodeID, NodeDescription, NodeUsedIn, eName, Weight_unit, Direction) %>%
-      summarise(cumsum_Weight = sum(Weight),
-                cumsum_Signed_Weight = sum(Weight * Weight_sign),
-                n_transactions = n()
+    this_frame <- 
+      group_by(sub, DataSource, NodeID, NodeDescription, NodeUsedIn, eName, Weight_unit, Direction) %>%
+      summarise(frame = i,
+                compKey = paste0(i, DataSource, NodeID, Direction),
+                last_sum_Weight      = NA,
+                last_signedWeight    = NA, 
+                last_n_transactions  = NA,
+                inc_sum_Weight       = NA, 
+                inc_sum_signedWeight = NA,
+                inc_n_transactions   = NA,
+                cumsum_Weight        = sum(Weight),
+                cumsum_signedWeight  = sum(Weight * Weight_sign),
+                n_transactions       = n()
+      ) %>% ungroup()
+
+    
+    ## CONTINUE WORK HERE, NEED COMP KEY ON LAST FRAME.
+    if (i > 1) {
+      last_frame <- anim_df[anim_df$frame == i - 1, ]
+      last_frame$frame <- last_frame$frame + 1
+      last_frame <- mutate(last_frame,
+                           compKey = paste0(frame + 1, DataSource, NodeID, Direction),
       )
-    .row$frame <- i
+      lf <- select(last_frame, 
+                   compKey, 
+                   cumsum_Weight, 
+                   cumsum_signedWeight, 
+                   n_transactions)
+      
+      this_frame <- mutate(this_frame,
+                           last_sum_Weight      = lf$cumsum_Weight,
+                           last_signedWeight    = lf$cumsum_signedWeight,
+                           last_n_transactions  = lf$n_transactions,
+                           inc_sum_Weight       = cumsum_Weight       - lf$cumsum_Weight,
+                           inc_sum_signedWeight = cumsum_signedWeight - lf$cumsum_signedWeight,
+                           inc_n_transactions   = n_transactions      - lf$n_transactions
+      )
+    }
     
-    anim_df <- rbind(anim_df,
-                     inner_join(frame_str, .row, by = "frame")
-    )
+    anim_df <- rbind(anim_df, this_frame)
   }
   anim_df <- as_tibble(anim_df)
   
