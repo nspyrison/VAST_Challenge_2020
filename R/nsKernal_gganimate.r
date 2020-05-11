@@ -248,9 +248,8 @@ if(do_run_ggraph == T){
                         color = nName,
                         fill  = nName,)
     ) +
-    #facet_graph(DataSource ~ eName) + 
-    ## this is the ggraph way to use facet_grid, but throws and error.
-    facet_grid(DataSource ~ eName) +
+    facet_graph(DataSource ~ nName) + 
+    #facet_grid(DataSource ~ eName) +
     th_foreground(foreground = 'grey', border = TRUE) + 
     theme_graph()
   ggsave(filename = "layout_fr%02d.png",
@@ -285,20 +284,21 @@ if(do_run_ggraph == T){
   
   ggraph(gr) +
     geom_edge_link(aes(color = eName),
-                   alpha = .alp, 
-                   arrow = arrow(length = unit(2, 'mm')), 
+                   alpha = .alp,
+                   arrow = arrow(length = unit(2, 'mm')),
                    end_cap = circle(2, 'mm')
-    ) + 
+    ) +
     geom_node_point(alpha = .alp,
                     size = 1.5,
                     aes(shape = nName,
                         color = nName,
-                        fill  = nName,)
+                        fill  = nName)
     ) +
-    #facet_graph(DataSource ~ eName)
-    facet_grid(DataSource ~ eName) +
+    facet_graph(DataSource ~ nName) +
+    #facet_grid(DataSource ~ eName) +
     th_foreground(foreground = 'grey', border = TRUE) + 
     theme_graph()
+  
   ggsave(filename = "gr%02d.png",
          path = file.path("./output/"),
          plot = last_plot(),
