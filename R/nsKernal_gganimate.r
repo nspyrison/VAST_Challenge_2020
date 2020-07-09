@@ -186,7 +186,7 @@ if(do_run_ggraph == T){
 
 ### AGGREGATION FOR GGANIMATION =====
 if(do_run_gganimate == TRUE){
-  .dat <- df_templateSuspect
+  .dat <- as.data.frame(df_templateSuspect)
   
   node_long_df <- 
     pivot_longer(.dat,
@@ -214,22 +214,59 @@ if(do_run_gganimate == TRUE){
   )
   frame_str$periodEndDate <- as_date(ymd(frame_str$periodEndDate) - seconds(1))
   
-  .n <- nrow(frame_str)
-  anim_df <- NULL
-  for (i in 1:.n) {
+  i_s <- 1:nrow(frame_str)
+  anim_df_CUMSUM <- NULL
+  for (i in i_s) {
     sub <- node_long_df[node_long_df$Datetime <= frame_str$periodEndDate[i], ]
     
-    this_frame <-
+    sub_agg <-
       group_by(sub, DataSource, eName, NodeID, Weight_unit, Direction) %>%
-      summarise(frame = i,
-                compKey = paste0(i, DataSource, NodeID, Direction),
+      summarise(compKey = paste0(i, DataSource, NodeID, Direction),
+                frame = i,
                 cumsum_Weight      = sum(Weight),
-                last_cumsum_Weight = sum(Weight) - Weight,
-                inc_cumsum_Weight  = Weight, 
-                cumcnt_edges       = count(1),
-                last_cumcnt_edges  = ,
-                inc_cumcnt_edges   = cumcnt_edges
-      ) %>% ungroup()
+                cumcnt_edges       = sum(1)) %>% 
+      ungroup()
+    
+    anim_df_CUMSUM <- rbind(anim_df_CUMSUM, sub_agg)
+  }
+  
+  anim_df <- anim_df_CUMSUM
+  # anim_df <- data.frame(anim_df_CUMSUM, 
+  #                       inc_Weight = NaN, 
+  #                       last_Weight = NaN, 
+  #                       inc_edges = NaN,
+  #                       last_edges = NaN)
+  for (i in i_s) {
+    if(i > 1){
+      ## select: compKey cumsum_Weight cumcnt_edges
+      sub <- anim_df[anim_df$frame == i, c(6, 8, 9)]
+      sub_last <- anim_df[anim_df$frame == i - 1, c(6, 8, 9)]
+      ## Correct compKey for the last frame to join. 
+      .last_i_nchar <- nchar(as.character(i - 1)) + 1
+      .compKey_nchar <- nchar(sub_last$compKey)
+      sub_last$compKey <- 
+        paste0(i, substr(sub_last$compKey, .last_i_nchar, .compKey_nchar))
+      colnames(sub_last) <- c("compKey", "last_Weight", "last_edges")
+      
+      u_sub <- unique(sub$compKey)
+      u_sub_last <- unique(sub_last$compKey)
+      length(u_sub)
+      length(u_sub_last)
+      message("THIS IS WRONG EXPECTING 4K each")
+      
+      lj_sub <- left_join(sub, sub_last, by = "compKey")
+      lj_sub <- mutate(lj_sub,
+                       inc_Weight = cumsum_Weight - last_Weight,
+                       inc_edges  = cumcnt_edges  - last_edges)
+      lj_sub <- select(lj_sub,
+                       cumsum_Weight,
+                       cumcnt_edges,
+                       inc_Weight,
+                       last_Weight)
+      
+      anim_df[anim_df$frame == i, 8:11] <- lj_sub
+    }
+  }
     
     
     ## CONTINUE WORKING HERE, when i =issue on aggrgation; 
