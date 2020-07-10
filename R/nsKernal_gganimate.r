@@ -9,7 +9,7 @@ library(tictoc); library(beepr); library(tidyverse); library(lubridate)
 do_run_ggraph                   <- TRUE
 do_run_gganimate                <- FALSE
 do_run_tsne                     <- TRUE
-do_save_output                  <- TRUE
+do_save_output                  <- FALSE
 
 subset_nms <- c("Template", paste0("Suspect", 1:5))
 height_in  <- 2 * length(subset_nms) + 1 ## + 1 for template
@@ -26,7 +26,8 @@ load(file = "./Data/denormalizationLookupTables.rds")
 ## Read data frame object "df_templateSuspect" into the global envirnment:
 #### Denormalized, but unaggregated data frame of the network data
 load(file = "./Data/df_templateSuspect.rds") 
-
+## list some lat long. 
+#head(df_templateSuspect[!is.na(df_templateSuspect$SourceLatitude), ])
 
 ### FORMATING FUNCTIONS =====
 ns_df2igraph <- function(dat){
@@ -204,117 +205,90 @@ if(do_run_gganimate == TRUE){
                          Weight_unit
   )
   
-  ## Date levels to aggregate data over
+  ## Create a df of date levels to aggregate data over by animation frame.
+  ##TODO: NEED TO SLECT SMARTER DATS DIST IS WHY OFF
   frame_str <- data.frame(frame = 1:36, 
                           periodName = c(2001:2024, paste0(2025, "-", str_pad(1:12, 2,pad = "0"))),
                           periodEndDate = c(
                             paste0(2002:2025, "-01-01"),
                             paste0(2025, "-", str_pad(2:12, 2,pad = "0"), "01"),
-                            "2026-01-01")
-  )
+                            "2026-01-01"))
   frame_str$periodEndDate <- as_date(ymd(frame_str$periodEndDate) - seconds(1))
   
-  i_s <- 1:nrow(frame_str)
-  anim_df_CUMSUM <- NULL
+  ## Agg table 1; sums by complex key
+  n_frames <- nrow(frame_str)
+  i_s <- 1L:n_frames
+  agg_tbl1 <- NULL
   for (i in i_s) {
-    sub <- node_long_df[node_long_df$Datetime <= frame_str$periodEndDate[i], ]
+    .df <- node_long_df[node_long_df$Datetime <= frame_str$periodEndDate[i], ]
     
-    sub_agg <-
-      group_by(sub, DataSource, eName, NodeID, Weight_unit, Direction) %>%
-      summarise(compKey = paste0(i, DataSource, NodeID, Direction),
-                frame = i,
-                cumsum_Weight      = sum(Weight),
-                cumcnt_edges       = sum(1)) %>% 
+    .df_gp <-
+      group_by(.df, DataSource, eName, NodeID, Direction, Weight_unit)
+    .agg <-
+        suppressMessages(
+          summarise(.df_gp, 
+                    frame = i,
+                    compKey = paste0(DataSource, eName, NodeID, Direction, i),
+                    sum_Weight  = sum(Weight),
+                    inc_Weight  = NaN,
+                    last_Weight = NaN,
+                    cnt_edges   = sum(1), 
+                    inc_Weight  = NaN,
+                    last_Weight = NaN)) %>% 
       ungroup()
     
-    anim_df_CUMSUM <- rbind(anim_df_CUMSUM, sub_agg)
+    
+    agg_tbl1 <- rbind(agg_tbl1, .agg)
+    print(c(i, i/n_frames, nrow(.agg), nrow(agg_tbl1)))
   }
   
-  anim_df <- anim_df_CUMSUM
-  # anim_df <- data.frame(anim_df_CUMSUM, 
-  #                       inc_Weight = NaN, 
-  #                       last_Weight = NaN, 
-  #                       inc_edges = NaN,
-  #                       last_edges = NaN)
+  ## Add in last and incremental values and join
+  agg_tbl2 <- NULL
   for (i in i_s) {
+    ## Add last values
     if(i > 1){
-      ## select: compKey cumsum_Weight cumcnt_edges
-      sub <- anim_df[anim_df$frame == i, c(6, 8, 9)]
-      sub_last <- anim_df[anim_df$frame == i - 1, c(6, 8, 9)]
+      ## Select: compKey cumsum_Weight cumcnt_edges
+      .df   <- select(agg_tbl1, frame, compKey, sum_Weight, cnt_edges)
+      .this <- .df[.df$frame == i, ]
+      .last <- .df[.df$frame == i - 1, ]
+      .last <- select(.last, -frame)
       ## Correct compKey for the last frame to join. 
       .last_i_nchar <- nchar(as.character(i - 1)) + 1
       .compKey_nchar <- nchar(sub_last$compKey)
-      sub_last$compKey <- 
-        paste0(i, substr(sub_last$compKey, .last_i_nchar, .compKey_nchar))
-      colnames(sub_last) <- c("compKey", "last_Weight", "last_edges")
+      .last$compKey <- 
+        paste0(i, substr(.last$compKey, .last_i_nchar, .compKey_nchar))
+      colnames(.last) <- c("compKey", "last_Weight", "last_edges")
       
-      u_sub <- unique(sub$compKey)
-      u_sub_last <- unique(sub_last$compKey)
-      length(u_sub)
-      length(u_sub_last)
-      message("THIS IS WRONG EXPECTING 4K each")
+      # u_sub      <- unique(sub$compKey)
+      # u_sub_last <- unique(sub_last$compKey)
+      # length(u_sub)
+      # length(u_sub_last)
       
-      lj_sub <- left_join(sub, sub_last, by = "compKey")
-      lj_sub <- mutate(lj_sub,
-                       inc_Weight = cumsum_Weight - last_Weight,
-                       inc_edges  = cumcnt_edges  - last_edges)
-      lj_sub <- select(lj_sub,
-                       cumsum_Weight,
-                       cumcnt_edges,
-                       inc_Weight,
-                       last_Weight)
+      .lj <- left_join(.this, .last, by = "compKey")
+      .lj <- mutate(.lj,
+                    inc_Weight = sum_Weight - last_Weight,
+                    inc_edges  = cnt_edges  - last_edges)
       
-      anim_df[anim_df$frame == i, 8:11] <- lj_sub
+      agg_tbl2 <- rbind(agg_tbl2, .lj)
+      print(c(i, i/n_frames, nrow(.lj), nrow(agg_tbl2)))
     }
   }
-    
-    
-    ## CONTINUE WORKING HERE, when i =issue on aggrgation; 
-    #### due to more than 1 transaction in agg? need to move inc to above?
-    
-    if (i > 1) {
-      last_frame <- anim_df[anim_df$frame == i - 1, ]
-      last_frame$frame <- last_frame$frame + 1
-      last_frame <- mutate(last_frame,
-                           compKey = paste0(frame + 1, DataSource, NodeID, Direction),
-      )
-      .lf <- select(last_frame,
-                    compKey,
-                    cumsum_Weight,
-                    cumcnt_edges)
-      
-      this_frame <- mutate(this_frame, .keep = "all",
-                           last_cumsum_Weight = .lf$cumsum_Weight,
-                           inc_cumsum_Weight  = cumsum_Weight - .sub$cumsum_Weight,
-                           last_cumcnt_edges  = .lf$cumcnt_edges,
-                           inc_cumcnt_edges   = cumcnt_edges  - .sub$cumcnt_edges
-      )
-    }
-    anim_df <- rbind(anim_df, this_frame)
-  }
+  ## CONTINUE WORKING HERE, when i =issue on aggrgation; 
+  dim(agg_tbl1)
+  dim(agg_tbl2)
   
-  node_minDate <- 
-  node_minDate <- group_by(node_long_df, DataSource, eName, NodeID, Weight_unit, Direction) %>%
-    summarise(compKey = paste0(i, DataSource, NodeID, Direction),
-              last_sum_Weight = NA,
-              last_cnt_edges  = NA,
-              inc_sum_Weight  = NA, 
-              last_cnt_edges  = NA,
-              cumsum_Weight   = sum(Weight),
-              cnt_edges       = count(eName)
-    ) %>% ungroup()
   
-  anim_df <- as_tibble(anim_df)
+  #### due to more than 1 transaction in agg? need to move inc to above?
+  
+  
+  node_minDate <- select(node_long_df, NodeID, Datetime) %>% 
+    group_by(NodeID) %>%
+    summarise(min_Datetime = min(Datetime)) %>% 
+    ungroup()
+  
 }
 
-  # ggplot() +
-  #   ggplot2::geom_point(data = anim_df,
-  #                       size = 2, alpha = .3,
-  #                       mapping = ggplot2::aes(x = x, y = y,
-  #                                              shape = eName,
-  #                                              color = eName, fill = eName,
-  #                                              frame = frame)
-  # )
+
 
 
 
