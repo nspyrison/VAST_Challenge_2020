@@ -6,10 +6,10 @@
 library(tictoc); library(beepr); library(tidyverse); library(lubridate)
 
 #do_run_sizable_data  <- F ## See nsKernal.r for full set consumption
-do_run_ggraph                   <- TRUE
-do_run_gganimate                <- FALSE
-do_run_tsne                     <- TRUE
-do_save_output                  <- FALSE
+do_run_ggraph    <- TRUE
+do_run_gganimate <- FALSE
+do_run_tsne      <- TRUE
+do_save_output   <- FALSE
 
 subset_nms <- c("Template", paste0("Suspect", 1:5))
 height_in  <- 2 * length(subset_nms) + 1 ## + 1 for template
@@ -18,14 +18,16 @@ width_in   <- 8
 .template_filepath <- "./Submissions/MC1/data/CGCS-Template.csv"
 .suspect_filepath_vect <- paste0("./Submissions/MC1/data/Q1-Graph", 1:5, ".csv")
 
-## Read the lookup tables into the global envirnment:
-#### eType_tbl, 
-#### demographic_tbl, .demographic_tbl_Target, .demographic_tbl_Source, 
-#### nodeType_tbl, .nodeType_tbl_Source, .nodeType_tbl_Target
+#### the lookup tables: eType_tbl, demographic_tbl, .demographic_tbl_Target,
+## .demographic_tbl_Source, nodeType_tbl, .nodeType_tbl_Source, .nodeType_tbl_Target
 load(file = "./Data/denormalizationLookupTables.rds")
-## Read data frame object "df_templateSuspect" into the global envirnment:
-#### Denormalized, but unaggregated data frame of the network data
+## Read data frame object "df_templateSuspect"; Denormalized, but unaggregated data frame of the network data
 load(file = "./Data/df_templateSuspect.rds") 
+## Read data frame object "agg_tbl"; aggregated data frame of the network data
+load(file = "./Data/agg_tbl.rds") 
+## Read data frame object "df_templateSuspect"; decode tbl for the min date each NodeID transacts.
+load(file = "./Data/node_minDate.rds") 
+
 ## list some lat long. 
 #head(df_templateSuspect[!is.na(df_templateSuspect$SourceLatitude), ])
 
@@ -82,9 +84,6 @@ if(do_run_ggraph == T){
   .dat <- df_templateSuspect[df_templateSuspect$SourceDescription == "Person", ]
   .dat <- .dat[.dat$DataSource %in% subset_nms, ]
   
-  # message("Scope of data:")
-  # summary(.dat[c("eType", "Datetime", "DataSource")])
-  # table(.dat[c("eName","DataSource")])
   
   ### _igraph route -----
   .igraph        <- ns_df2igraph(dat = .dat)
@@ -185,114 +184,6 @@ if(do_run_ggraph == T){
 
 }
 
-### AGGREGATION FOR GGANIMATION =====
-if(do_run_gganimate == TRUE){
-  .dat <- as.data.frame(df_templateSuspect)
-  
-  node_long_df <- 
-    pivot_longer(.dat,
-                 cols = Source:Target,
-                 names_to = "Direction",
-                 values_to = "NodeID")
-  node_long_df$Direction <- ifelse(node_long_df$Direction == "Source", "Sent", "Received")
-  node_long_df <- select(node_long_df, ## MAY NEED DENORMALIZATION LATER
-                         DataSource,
-                         Datetime,
-                         eName,
-                         NodeID,
-                         Direction,
-                         Weight,
-                         Weight_unit
-  )
-  
-  ## Create a df of date levels to aggregate data over by animation frame.
-  ##TODO: NEED TO SLECT SMARTER DATS DIST IS WHY OFF
-  frame_str <- data.frame(frame = 1:36, 
-                          periodName = c(2001:2024, paste0(2025, "-", str_pad(1:12, 2,pad = "0"))),
-                          periodEndDate = c(
-                            paste0(2002:2025, "-01-01"),
-                            paste0(2025, "-", str_pad(2:12, 2,pad = "0"), "01"),
-                            "2026-01-01"))
-  frame_str$periodEndDate <- as_date(ymd(frame_str$periodEndDate) - seconds(1))
-  
-  ## Agg table 1; sums by complex key
-  n_frames <- nrow(frame_str)
-  i_s <- 1L:n_frames
-  agg_tbl1 <- NULL
-  for (i in i_s) {
-    .df <- node_long_df[node_long_df$Datetime <= frame_str$periodEndDate[i], ]
-    
-    .df_gp <-
-      group_by(.df, DataSource, eName, NodeID, Direction, Weight_unit)
-    .agg <-
-        suppressMessages(
-          summarise(.df_gp, 
-                    frame = i,
-                    compKey = paste0(DataSource, eName, NodeID, Direction, i),
-                    sum_Weight  = sum(Weight),
-                    inc_Weight  = NaN,
-                    last_Weight = NaN,
-                    cnt_edges   = sum(1), 
-                    inc_Weight  = NaN,
-                    last_Weight = NaN)) %>% 
-      ungroup()
-    
-    
-    agg_tbl1 <- rbind(agg_tbl1, .agg)
-    print(c(i, i/n_frames, nrow(.agg), nrow(agg_tbl1)))
-  }
-  
-  ## Add in last and incremental values and join
-  agg_tbl2 <- NULL
-  for (i in i_s) {
-    ## Add last values
-    if(i > 1){
-      ## Select: compKey cumsum_Weight cumcnt_edges
-      .df   <- select(agg_tbl1, frame, compKey, sum_Weight, cnt_edges)
-      .this <- .df[.df$frame == i, ]
-      .last <- .df[.df$frame == i - 1, ]
-      .last <- select(.last, -frame)
-      ## Correct compKey for the last frame to join. 
-      .last_i_nchar <- nchar(as.character(i - 1)) + 1
-      .compKey_nchar <- nchar(sub_last$compKey)
-      .last$compKey <- 
-        paste0(i, substr(.last$compKey, .last_i_nchar, .compKey_nchar))
-      colnames(.last) <- c("compKey", "last_Weight", "last_edges")
-      
-      # u_sub      <- unique(sub$compKey)
-      # u_sub_last <- unique(sub_last$compKey)
-      # length(u_sub)
-      # length(u_sub_last)
-      
-      .lj <- left_join(.this, .last, by = "compKey")
-      .lj <- mutate(.lj,
-                    inc_Weight = sum_Weight - last_Weight,
-                    inc_edges  = cnt_edges  - last_edges)
-      
-      agg_tbl2 <- rbind(agg_tbl2, .lj)
-      print(c(i, i/n_frames, nrow(.lj), nrow(agg_tbl2)))
-    }
-  }
-  ## CONTINUE WORKING HERE, when i =issue on aggrgation; 
-  dim(agg_tbl1)
-  dim(agg_tbl2)
-  
-  
-  #### due to more than 1 transaction in agg? need to move inc to above?
-  
-  
-  node_minDate <- select(node_long_df, NodeID, Datetime) %>% 
-    group_by(NodeID) %>%
-    summarise(min_Datetime = min(Datetime)) %>% 
-    ungroup()
-  
-}
-
-
-
-
-
-
 
 ### TEMPLATE-SUSPECT EDGES tSNE =====
 if(do_run_tsne == T){
@@ -306,12 +197,6 @@ if(do_run_tsne == T){
                        eType,
                        DataSource,
                        Weight
-                       # SourceLocation,
-                       # TargetLocation,
-                       # SourceLatitude,
-                       # SourceLongitude,
-                       # TargetLatitude,
-                       # TargetLongitude
   )
   ## tSNE doesn't like NAs:
   tsne_edges[is.na(tsne_edges)] <- -99
@@ -333,7 +218,7 @@ if(do_run_tsne == T){
     geom_point(
       aes(x = x,
           y = y,
-          pch = eName,
+          pch = DataSource,
           col = DataSource,
           fill = DataSource
       ),
