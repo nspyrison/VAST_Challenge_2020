@@ -188,31 +188,63 @@ if(do_run_ggraph == T){
 ### TEMPLATE-SUSPECT EDGES tSNE =====
 if(do_run_tsne == T){
   library("Rtsne")
-  .dat <- df_templateSuspect
-  .dat <- .dat[.dat$DataSource %in% subset_nms, ]
-  .dat <- .dat[.dat$eName == "demographic, financial", ]
+  node_long_df <- pivot_longer(df_templateSuspect,
+                               cols = Source:Target,
+                               names_to = "Direction",
+                               values_to = "NodeID")
+  .dat <- select(node_long_df,
+                 DataSource,
+                 eName,
+                 SecondsAfterStart,
+                 NodeID,
+                 Direction,
+                 eType,
+                 Weight
+  )
+  .dat$Direction <- as.factor(.dat$Direction)
   
-  tsne_edges <- select(.dat,
-                       SecondsAfterStart,
-                       eType,
-                       DataSource,
-                       Weight
-  )
-  ## tSNE doesn't like NAs:
-  tsne_edges[is.na(tsne_edges)] <- -99
-  message("Make sure -99 isn't going to mess with data with locations")
+  .DataSource_s <- unique(.dat$DataSource)
+  .eName_s      <- unique(.dat$eName)
+  table(.dat$eName)
+  i_s <- 1:length(.DataSource_s)
+  j_s <- 2:4#1:length(.eName_s)
+  df_tsne <- NULL
+  i<-1;j<-j_s[1]
+  for(i in i_s) {
+    for(j in j_s) {
+      .x <- .dat
+      .x <- .x[.x$DataSource == .DataSource_s[i],]
+      .x <- .x[.x$eName == .eName_s[j],]
+      .x <- select(.x,
+                   SecondsAfterStart,
+                   NodeID,
+                   Direction,
+                   eType,
+                   Weight
+      )
 
-  tsne_obj <- Rtsne::Rtsne(tsne_edges, dims = 2,
-                          perplexity = 1 / 3 * sqrt(nrow(tsne_edges)),
-                          max_iter = 500,
-                          check_duplicates = F,
-                          pca = T,
-                          verbose = TRUE,
-                          theta = .5  ## [0, 1] increases speed at expense of accuracy
-  )
-
-  f_tsne_obj <- ns_decode_tsne_obj(tsne_edges, tsne_obj)
-
+      ## tSNE doesn't like NAs, remove all rows with NA.
+      k_s <- 1:ncol(.x)
+      for(k in k_s){
+        .x[, k] <- .x[, k][!is.na(.x[, k])]
+      }
+      tsne_edges <- .x
+      tsne_obj <- Rtsne::Rtsne(tsne_edges, 
+                               dims = 2,
+                               perplexity = 1 / 3 * sqrt(nrow(tsne_edges)),
+                               max_iter = 500,
+                               check_duplicates = F,
+                               pca = T,
+                               verbose = TRUE,
+                               theta = .5  ## [0, 1] increases speed at expense of accuracy
+      )
+      this_tsne <- ns_decode_tsne_obj(tsne_edges, tsne_obj)
+      
+      
+      
+    }
+  }
+  
   gg_tsne <- 
     ggplot(f_tsne_obj) +
     geom_point(
