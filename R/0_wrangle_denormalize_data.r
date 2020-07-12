@@ -18,7 +18,7 @@ eType_tbl <-
                          "sell",
                          "purchase",
                          "co-authorship",
-                         "demographic, financial",
+                         "demographic",
                          "travel"),
              "Weight_unit" = c("count",
                                "count",
@@ -107,8 +107,8 @@ ns_format_df <- function(dat){
   dat <- left_join(dat, eType_tbl, by = "eType")
   dat <- left_join(dat, .demographic_tbl_Source, by = "Source")
   dat <- left_join(dat, .demographic_tbl_Target, by = "Target")
-  dat <- left_join(dat, .nodeType_tbl_Source, by = "Source")
-  dat <- left_join(dat, .nodeType_tbl_Target, by = "Target")
+  dat <- left_join(dat, .nodeType_tbl_Source,    by = "Source")
+  dat <- left_join(dat, .nodeType_tbl_Target,    by = "Target")
   dat[dat == -99] <- NA
   
   ## reordered, esp for: 'to/Source' and 'from/Target' first.

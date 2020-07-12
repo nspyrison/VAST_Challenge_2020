@@ -1,0 +1,54 @@
+---
+title: >
+  Exploration and evaluation of likeness in multimodal networks
+subtitle: > 
+  VAST challenge 2020, Mini-Challenge 1, student team: night parrot
+author:
+  - name: Nicholas Spyrison
+    affiliation: Monash University 
+    address: Faculty of Information Technology
+    email: nicholas.spyrison@monash.edu
+  - name: Miji Kim
+    affiliation: Monash University 
+    address: Department of Human-Centred Computing ## Vs FIT
+    email: mkim0021@student.monash.edu
+  - name: Ha Nam Anh Pham
+    affiliation: Monash University 
+    address: Department of Human-Centred Computing ## Vs FIT
+    email: hnpha5@student.monash.edu
+abstract: >
+  abstract goes here
+link-citations: true
+fig_caption: yes
+toc: false
+bibliography: NightParrotSummary.bib
+output:
+  rticles::ieee_article
+---
+\bibliography{NightParrotSummary}
+
+```{r setup, include=F}
+## Load packages here.
+library("knitr")
+knitr::opts_chunk$set(
+  message   = F, warning = F, error = F,
+  results   = "asis",                # Opts: "asis", "markup", "hold", "hide"
+  # fig.align = "center",              # Opts: "left", "right", "center", "default"
+  # fig.width = 8, fig.height = 5,
+  # out.width = "100%",
+  # fig.pos   = "h", out.extra   = "", # Figures forced closer to chunk location.
+  collapse  = TRUE, cache = FALSE, cache.lazy  = FALSE
+)
+
+```
+
+# Introduction
+
+# Convolultion matrix
+```{r}
+pairs(mtcars)
+```
+
+# Network faceting on eType*Datasource
+
+##

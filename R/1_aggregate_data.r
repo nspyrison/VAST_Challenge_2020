@@ -1,12 +1,6 @@
 ##### PREAMBLE =====
 library(tictoc); library(beepr); library(tidyverse); library(lubridate)
 
-do_save_output <- TRUE
-
-.template_filepath <- "./Submissions/MC1/data/CGCS-Template.csv"
-.suspect_filepath_vect <- paste0("./Submissions/MC1/data/Q1-Graph", 1:5, ".csv")
-
-
 #### the lookup tables: eType_tbl, demographic_tbl, .demographic_tbl_Target,
 ## .demographic_tbl_Source, nodeType_tbl, .nodeType_tbl_Source, .nodeType_tbl_Target
 load(file = "./Data/denormalizationLookupTables.rds")
@@ -41,23 +35,30 @@ frame_str <- data.frame(frame = 1:36,
                           paste0(2025, "-", str_pad(2:12, 2,pad = "0"), "01"),
                           "2026-01-01"))
 frame_str$periodEndDate <- as_date(ymd(frame_str$periodEndDate) - seconds(1))
+i_s <- 1:(nrow(frame_str) - 1)
+.startDate <- min(.dat$Datetime)
+for (i in i_s) {
+  frame_str$periodStartDate[i] <- .startDate
+  .startDate <- as_date(ymd(frame_str$periodEndDate[i]) + days(1))
+}
 
 ## Agg table 1; sums by complex key
 n_frames <- nrow(frame_str)
 i_s <- 1L:n_frames
 agg_tbl1 <- NULL
 for (i in i_s) {
-  .df <- node_long_df[node_long_df$Datetime <= frame_str$periodEndDate[i], ]
+  .df <- node_long_df[node_long_df$Datetime <= frame_str$periodEndDate[i] &
+                        node_long_df$Datetime >= frame_str$periodStartDate[i], ]
   
   .df_gp <-
-    group_by(.df, DataSource, Datetime, eName, NodeID, Direction, Weight_unit)
+    group_by(.df, DataSource, eName, NodeID, Direction, Weight_unit)
   .agg <-
     suppressMessages(
       summarise(.df_gp, 
                 frame = i,
                 compKey = paste0(i, DataSource, eName, NodeID, Direction),
-                sum_Weight  = sum(Weight),
-                cnt_edges   = sum(1)
+                inc_Weight  = sum(Weight),
+                inc_edges   = sum(1)
       )
     ) %>% 
     ungroup()
@@ -66,13 +67,14 @@ for (i in i_s) {
   agg_tbl1 <- rbind(agg_tbl1, .agg)
   print(c(i, i/n_frames, nrow(.agg), nrow(agg_tbl1)))
 }
+agg_tbl1
 
 ## Add in last and incremental values and join
 agg_tbl2 <- NULL
-.df <- select(agg_tbl1, frame, compKey, sum_Weight, cnt_edges)
+.df <- select(agg_tbl1, frame, compKey, inc_Weight, inc_edges)
 for (i in i_s) {
   ## Add last values
-  if(i > 1){
+  if (i > 1){
     ## Select: compKey cumsum_Weight cumcnt_edges
     .this <- .df[.df$frame == i, ]
     .last <- .df[.df$frame == i - 1, ]
@@ -87,27 +89,17 @@ for (i in i_s) {
     length(unique(.last$compKey))
     
     .lj <- left_join(.this, .last, by = "compKey")
-    .lj <- mutate(.lj,
-                  inc_Weight = sum_Weight - last_Weight,
-                  inc_edges  = cnt_edges  - last_edges)
-    
-    
-    
-    ## Join validation:
-    # print(paste0("THIS: ", length(unique(.this$compKey))))
-    # print(paste0("LAST: ", length(unique(.last$compKey))))
-    # print(paste0(".lj: ", length(unique(.lj$compKey))))
     
     agg_tbl2 <- rbind(agg_tbl2, .lj)
     print(c(i, i/n_frames, nrow(.lj), nrow(agg_tbl2)))
   }
 }
-compKey_decode <- select(agg_tbl1, compKey, DataSource, Datetime, eName, NodeID, Direction, Weight_unit)
+compKey_decode <- select(agg_tbl1, compKey, DataSource, eName, NodeID, Direction, Weight_unit)
 agg_tbl3 <- left_join(agg_tbl2, compKey_decode, by = "compKey")
 agg_tbl3 <- 
   select(agg_tbl3, 
-         DataSource, Datetime, eName, NodeID, Direction, frame, Weight_unit, 
-         sum_Weight, cnt_edges, last_Weight, last_edges, inc_Weight, inc_edges)
+         DataSource, eName, NodeID, Direction, frame, Weight_unit, 
+         last_Weight, last_edges, inc_Weight, inc_edges)
 ### FINAL AGG TBL:
 agg_tbl <- agg_tbl3
 
@@ -118,9 +110,7 @@ node_minDate <- select(node_long_df, NodeID, Datetime) %>%
   summarise(min_Datetime = min(Datetime)) %>% 
   ungroup()
 
-if(do_save_output == T) {
-  save(agg_tbl, file = "./Data/agg_tbl.rds")
-  save(node_minDate, file = "./Data/node_minDate.rds")
-  cat("NS: saved ./Data/agg_tbl.rds \n")
-  cat("NS: saved ./Data/node_minDate.rds \n")
-}
+save(agg_tbl, file = "./Data/agg_tbl.rds")
+save(node_minDate, file = "./Data/node_minDate.rds")
+cat("NS: saved ./Data/agg_tbl.rds \n")
+cat("NS: saved ./Data/node_minDate.rds \n")
