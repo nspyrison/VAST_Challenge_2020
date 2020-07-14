@@ -30,8 +30,11 @@ output:
 ```{r setup, include=F}
 ## Load packages here.
 library("knitr")
+
+DO_RUN_LIVE <- FALSE
+
 knitr::opts_chunk$set(
-  message   = F, warning = F, error = F,
+  message   = F, warning = F, error = F, eval = DO_RUN_LIVE,
   results   = "asis",                # Opts: "asis", "markup", "hold", "hide"
   # fig.align = "center",              # Opts: "left", "right", "center", "default"
   # fig.width = 8, fig.height = 5,
@@ -46,6 +49,8 @@ knitr::opts_chunk$set(
 
 # Convolultion matrix
 ```{r}
+
+
 pairs(mtcars)
 ```
 
