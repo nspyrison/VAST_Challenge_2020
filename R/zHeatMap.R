@@ -3,12 +3,6 @@
 ##### PREAMBLE =====
 library(tictoc); library(beepr); library(tidyverse); library(lubridate)
 
-#do_run_sizable_data  <- F ## See nsKernal.r for full set consumption
-do_run_ggraph    <- TRUE
-do_run_gganimate <- FALSE
-do_run_tsne      <- TRUE
-do_save_output   <- FALSE
-
 subset_nms <- c("Template", paste0("Suspect", 1:5))
 height_in  <- 2 * length(subset_nms) + 1 ## + 1 for template
 width_in   <- 8
@@ -28,51 +22,32 @@ load(file = "./Data/node_minDate.rds")
 
 
 
+
 library(tidyverse)
 library(hrbrthemes)
 library(viridis)
 library(plotly)
 library(d3heatmap)
 
-# Load data 
-data <- df_templateSuspect
-sub <- select(data, DataSource, eName, Weight)
-sub <- na.omit(sub)
+## CLean 
+## Rrmove location NULL columns
+dat <- select(df_templateSuspect, Source:SourceNodeTypeUsedIn)
+## Only complete rows
+cl_dat <- dat[complete.cases(dat), ]
+cl_dat$Weight <- abs(cl_dat$Weight)
+data <- cl_dat
 
+## Select req col
+sub <- tibble::as.tibble(select(data, DataSource, eName, Weight))
+sub
 agg <- group_by(sub, DataSource, eName) %>% 
-  summarise(std_Weight = (Weight - mean(Weight)) / sd(Weight)) %>% 
+  summarise(sum_Weight = sum(Weight),
+            cnt_edges = n()) %>% 
   ungroup()
 
-table(agg$DataSource, )
-margin.table(agg,1)/margin.table(smoke)
 
-
-agg <- na.omit(agg)
-z <- agg[agg$std_Weight <5,]
-ggplot(data = z, 
+ggplot(data = agg, 
        mapping = aes(x = eName,
                      y = DataSource,
-                     fill = std_Weight)) +
-  geom_tile() 
-table()
-
-#+
-  #xlab(label = "Sample")
-library(heatmaply)
-p <- heatmaply(mat, 
-               dendrogram = "none",
-               xlab = "", ylab = "", 
-               main = "",
-               scale = "column",
-               margins = c(60,100,40,20),
-               grid_color = "white",
-               grid_width = 0.00001,
-               titleX = FALSE,
-               hide_colorbar = TRUE,
-               branches_lwd = 0.1,
-               label_names = c("Country", "Feature:", "Value"),
-               fontsize_row = 5, fontsize_col = 5,
-               labCol = colnames(mat),
-               labRow = rownames(mat),
-               heatmap_layers = theme(axis.line=element_blank())
-)
+                     fill = cnt_edges)) +
+  geom_tile() + theme_minimal() + theme(legend.position = "bottom")
