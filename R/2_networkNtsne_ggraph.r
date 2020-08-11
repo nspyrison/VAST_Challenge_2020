@@ -7,18 +7,13 @@
   
   #do_run_sizable_data  <- F ## See nsKernal.r for full set consumption
   do_run_ggraph    <- TRUE
-  do_run_gganimate <- FALSE
   do_run_tsne      <- TRUE
   do_save_output   <- TRUE
   
   subset_nms <- c("Template", paste0("Suspect", 1:5))
-  asp_r <- 6/6.5
-  width_in  <- 4
-  height_in <- 4 / asp_r
-  width_cm  <- 12
-  height_cm <- 12 / asp_r
-  width_px  <- 660
-  height_px <- 660 / asp_r
+  width_cm  <- 8.4
+  height_cm <- 8.4
+
   
   .template_filepath <- "./Submissions/MC1/data/CGCS-Template.csv"
   .suspect_filepath_vect <- paste0("./Submissions/MC1/data/Q1-Graph", 1:5, ".csv")
@@ -61,21 +56,24 @@
     return(.lay)
   }
 
-
   ns_decode_tsne_obj <- function(tsne_input, tsne_output){
-    decoded_input <- left_join(tsne_input, eType_tbl, by = "eName")
+    decoded_input <- left_join(tsne_input, eType_tbl, by = "eType")
     tibble(x = tsne_output$Y[, 1],
            y = tsne_output$Y[, 2],
+           eType       = decoded_input$eType,
            eName       = decoded_input$eName,
            DataSource  = decoded_input$DataSource,
            Weight      = decoded_input$Weight,
            Weight_unit = decoded_input$Weight_unit
     )
   }
-
+  
 }
 
+
 ### NEWTWORK VIS =====
+
+
 if(do_run_ggraph == T){
   library("tidygraph"); library("ggraph"); library("igraph");
   ## Rrmove location NULL columns
@@ -98,49 +96,30 @@ if(do_run_ggraph == T){
   rownames(cnt_mat) <- u_DataSource
   colnames(cnt_mat) <- u_eName
   cnt_mat_igraph <- cnt_mat_ggraph <- cnt_mat
-  # for(i in i_s) {
-  #   for(j in j_s) {
-  #     i<-j<-1
-  #     print(c("i is", i, ". j is ", j, "."))
-      .dat <- cl_dat
-      # .dat <- .dat[.dat$DataSource %in% u_DataSource[i], ]
-      # .dat <- .dat[.dat$eName %in% u_eName[j], ]
-      # cnt_mat[i, j] <- nrow(.dat)
-      
-      ## rbind to df_*_netwrok if present
-      if (nrow(.dat) > 0){
-        ## ggraph route: !!!
-        .ggpraph <- as_tbl_graph(.dat)
-        .ggpraph <- mutate(.ggpraph, name = as.integer(name))
-        .ggpraph <- left_join(.ggpraph, nodeType_tbl, c("name" = "NodeID"))
-        .ggpraph <- mutate(.ggpraph,
-                           nType = NodeType,
-                           nName = Description,
-                           nUsedIn = Used.in,
-                           nPopularity = 
-                             as.character(cut(centrality_degree(mode = 'in'),
-                                              breaks = 5,
-                                              labels = paste0(c("1st",
-                                                                "2nd",
-                                                                "3rd",
-                                                                "4th",
-                                                                "5th"), " Quantile")))
-        )
-        # .ggpraph$DataSource <- u_DataSource[i]
-        # .ggpraph$eName <- u_eName[i]
-        
-        df_ggraph_network <- .ggpraph
-        #<- rbind(df_ggraph_network, .ggpraph)
-        #cnt_mat_ggraph[i, j] <- nrow(.ggpraph)
-      }
-      
-  #     print(c("i= ", i, ". j= ",  j, ". nrow(.dat): ", nrow(.dat)))
-  #   }
-  # }
-  # cnt_mat
-  # cnt_mat_ggraph
-  # cnt_mat_igraph
-
+  
+  .dat <- cl_dat
+  ## rbind to df_*_netwrok if present
+  if (nrow(.dat) > 0){
+    ## ggraph route: !!!
+    .ggpraph <- as_tbl_graph(.dat)
+    .ggpraph <- mutate(.ggpraph, name = as.integer(name))
+    .ggpraph <- left_join(.ggpraph, nodeType_tbl, c("name" = "NodeID"))
+    .ggpraph <- mutate(.ggpraph,
+                       nType = NodeType,
+                       nName = Description,
+                       nUsedIn = Used.in,
+                       nPopularity = 
+                         as.character(cut(centrality_degree(mode = 'in'),
+                                          breaks = 5,
+                                          labels = paste0(c("1st",
+                                                            "2nd",
+                                                            "3rd",
+                                                            "4th",
+                                                            "5th"), " Quantile")))
+    )
+    
+    df_ggraph_network <- .ggpraph
+  }
   
   ### _visualize -----
   ## Building from:
@@ -167,29 +146,28 @@ if(do_run_ggraph == T){
                         color = nName,
                         fill  = nName)
     ) +
-    facet_grid(~ DataSource) + #~ nName) + # vs facet_grid
+    facet_grid(nName ~ DataSource) +
+    #facet_wrap(~ DataSource) + #~ nName
     th_foreground(foreground = 'lightgrey', border = TRUE) +
     theme(legend.position = "bottom")
   
   if(do_save_output == TRUE){
-    library("lubridate")
-    (fn <- paste0("ggraph_", .lay, .alg, 
-                 "_", width_px, "x", height_px, 
-                 "_HHMM", hour(now()),minute(now()), ""))
-    writeClipboard(fn)
-    # ggsave(filename = fn,
-    #        path = file.path("./output/"),
-    #        plot = last_plot(),
-    #        device = "png",
-    #        units = "cm",
-    #        width  = width_in,
-    #        height = height_in)
-    # cat(paste0("NS: ggsave'd: ", fn))
+    fn <- paste0("ggraph_", .lay, .alg, 
+                 "_", width_cm, "x", height_cm, ".png")
+    ggsave(filename = fn,
+           path = file.path("./output/"),
+           plot = last_plot(),
+           device = "png",
+           units = "cm",
+           dpi = 300, 
+           width  = width_cm,
+           height = height_cm)
+    cat(paste0("NS: ggsave'd: ", fn))
   }
 }
 
 
-### tSNE =====
+### TEMPLATE-SUSPECT EDGES tSNE =====
 if(do_run_tsne == T){
   library("Rtsne")
   ## Rrmove location NULL columns
@@ -207,10 +185,11 @@ if(do_run_tsne == T){
   ## STOPPED HERE
   .dat <- select(.dat,
                  DataSource,
-                 NodeID,
                  eName,
                  SecondsAfterStart,
+                 NodeID,
                  Direction,
+                 eName,
                  Weight
   )
   .dat <- mutate(.dat,
@@ -221,24 +200,30 @@ if(do_run_tsne == T){
                  Direction = as.factor(Direction),
                  Weight
   )
+
+  .dat$Direction <- as.factor(.dat$Direction)
+  .dat$eName     <- as.factor(.dat$eName)
+  .dat$DataSource <- as.factor(.dat$DataSource)
   
   .DataSource_s <- unique(.dat$DataSource)
+  .eName_s      <- unique(.dat$eName)
+  table(.dat$eName)
   i_s <- 1:length(.DataSource_s)
-  i <- i_s[1]
   df_tsne <- NULL
+  if(F)
+    i<-1;
   for(i in i_s) {
-    .x <- .dat
-    .x <- .x[.x$DataSource == .DataSource_s[i],]
-    .x <- select(.x,
-                 DataSource,
-                 SecondsAfterStart,
-                 NodeID,
-                 Direction,
-                 eName,
-                 Weight
+    sub <- .dat
+    sub <- sub[sub$DataSource == .DataSource_s[i],]
+    sub <- select(sub,
+                  SecondsAfterStart,
+                  NodeID,
+                  Direction,
+                  #eType,
+                  Weight
     )
     
-    tsne_edges <- select(.x, -DataSource)
+    tsne_edges <- sub
     tsne_obj <- Rtsne::Rtsne(tsne_edges, 
                              dims = 2,
                              perplexity = 1 / 3 * sqrt(nrow(tsne_edges)),
@@ -248,29 +233,32 @@ if(do_run_tsne == T){
                              verbose = TRUE,
                              theta = .5  ## [0, 1] increases speed at expense of accuracy
     )
-    
-    this_tsne <- ns_decode_tsne_obj(.x, tsne_obj)
-    df_tsne <- rbind(df_tsne, this_tsne)
+    this_tsne <- ns_decode_tsne_obj(tsne_edges, tsne_obj)
   }
   
-  ggplot(df_tsne) +
-    geom_point(aes(x = x, y = y, pch = DataSource, col = DataSource),
-               alpha = .3) + 
-    facet_grid(~ DataSource) +
-    theme_minimal() +
-    theme(axis.title = ggplot2::element_blank(),
-          axis.ticks = ggplot2::element_blank(),
-          axis.text  = ggplot2::element_blank(),
-          legend.position = "bottom")
+  gg_tsne <- 
+    ggplot(f_tsne_obj) +
+    geom_point(
+      aes(x = x,
+          y = y,
+          pch = DataSource,
+          col = DataSource,
+          fill = DataSource
+      ),
+      alpha = .3
+    ) + theme_minimal() +
+    theme(legend.position = "bottom")
   
   if(do_save_output == TRUE){
-    ggsave(filename = "tSNE_%02d.png",
+    ggsave(filename = 
+             paste0("tSNE_", width_cm, "x", height_cm / 4, ".png"),
            path = file.path("./output/"),
            plot = last_plot(),
            device = "png",
-           units = "in",
-           width = width_in,
-           height = height_in)
+           dpi = 300,
+           units = "cm",
+           width = width_cm,
+           height = height_cm/4)
   }
 }
 
