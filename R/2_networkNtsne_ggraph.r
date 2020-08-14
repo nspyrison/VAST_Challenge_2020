@@ -11,8 +11,9 @@
   do_save_output   <- TRUE
   
   subset_nms <- c("Template", paste0("Suspect", 1:5))
-  width_cm  <- 8.4
-  height_cm <- 8.4
+  width_cm  <- 14
+  height_cm <- 14
+  dpi <- 500
 
   
   .template_filepath <- "./Submissions/MC1/data/CGCS-Template.csv"
@@ -72,8 +73,6 @@
 
 
 ### NEWTWORK VIS =====
-
-
 if(do_run_ggraph == T){
   library("tidygraph"); library("ggraph"); library("igraph");
   ## Rrmove location NULL columns
@@ -153,13 +152,13 @@ if(do_run_ggraph == T){
   
   if(do_save_output == TRUE){
     fn <- paste0("ggraph_", .lay, .alg, 
-                 "_", width_cm, "x", height_cm, ".png")
+                 "_", width_cm, "x", height_cm, "xx", dpi, ".png")
     ggsave(filename = fn,
            path = file.path("./output/"),
            plot = last_plot(),
            device = "png",
            units = "cm",
-           dpi = 300, 
+           dpi = dpi, 
            width  = width_cm,
            height = height_cm)
     cat(paste0("NS: ggsave'd: ", fn))
