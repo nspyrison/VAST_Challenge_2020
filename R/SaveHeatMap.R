@@ -51,6 +51,7 @@ ggplot(data = agg,
                      y = DataSource,
                      fill = cnt_edges)) +
   geom_tile() + 
+  scale_fill_gradient(low = "blue", high = "red") +
   theme_minimal() + 
   theme(legend.position = "right",
                                         axis.text.x = element_text(angle = 20)) +
