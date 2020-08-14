@@ -11,10 +11,6 @@
   do_save_output   <- TRUE
   
   subset_nms <- c("Template", paste0("Suspect", 1:5))
-  width_cm  <- 20
-  height_cm <- 20
-  dpi <- 300
-
   
   .template_filepath <- "./Submissions/MC1/data/CGCS-Template.csv"
   .suspect_filepath_vect <- paste0("./Submissions/MC1/data/Q1-Graph", 1:5, ".csv")
@@ -87,7 +83,6 @@ if(do_run_ggraph == T){
   .dat <- cl_dat
   ## rbind to df_*_netwrok if present
   if (nrow(.dat) > 0){
-    ## ggraph route: !!!
     .ggpraph <- as_tbl_graph(.dat)
     .ggpraph <- mutate(.ggpraph, name = as.integer(name))
     .ggpraph <- left_join(.ggpraph, nodeType_tbl, c("name" = "NodeID"))
@@ -104,7 +99,6 @@ if(do_run_ggraph == T){
                                                             "4th",
                                                             "5th"), " Quantile")))
     )
-    
     df_ggraph_network <- .ggpraph
   }
   
@@ -112,33 +106,31 @@ if(do_run_ggraph == T){
   ## Building from:
   if (F)
     browseURL("http://users.dimi.uniud.it/~massimo.franceschet/ns/syllabus/make/ggraph/ggraph.html")
-  .alp <- .35
-  
-  ### _ggraph route: !!!
-  ## add Node attributes
-  .lay <- 'igraph'
-  .alg <- 'lgl'
-  gglay = create_layout(.ggpraph, layout = .lay, algorithm = .alg)
-  ggraph(gglay) +
-    geom_edge_link(#aes(color = eName),
-                   color = "grey20",
-                   size = .8,
+  .alp <- .34
+  .lay <- "igraph"
+  .alg <- "lgl"
+  gglayout = create_layout(df_ggraph_network, layout = .lay, algorithm = .alg)
+  ggraph(gglayout) +
+    geom_edge_link(color = "grey40",
+                   edge_width = .5,
                    alpha = .alp,
-                   arrow = arrow(length = unit(2, 'mm')),
-                   end_cap = circle(2, 'mm')
-    ) +
+                   arrow = arrow(length = unit(1.5, 'mm')),
+                   end_cap = circle(1, 'mm')) +
     geom_node_point(alpha = .alp,
                     size = 2,
                     aes(shape = nName,
                         color = nName,
-                        fill  = nName)
-    ) +
+                        fill  = nName)) +
     facet_grid(nName ~ DataSource) +
-    #facet_wrap(~ DataSource) + #~ nName
-    th_foreground(foreground = 'lightgrey', border = TRUE) +
-    theme(legend.position = "bottom")
+    th_foreground(foreground = "lightgrey", border = TRUE) +
+    theme(legend.position = "bottom",
+          legend.margin = margin(0, 0 , 0, 0),
+          legend.box.margin = margin(t = -10, r = -10, b = -5, l = -10))
   
   if(do_save_output == TRUE){
+    width_cm  <- 12.6
+    height_cm <- 12.6
+    dpi <- 450
     fn <- paste0("ggraph_", .lay, .alg, 
                  "_", width_cm, "x", height_cm, "xx", dpi, ".png")
     ggsave(filename = fn,
@@ -188,10 +180,11 @@ if(do_run_tsne == T){
                  Weight
   )
   
-  i_s <- 1:length(unique(.dat$DataSource))
+  .DataSource_s <- unique(.dat$DataSource)
+  i_s <- 1:length(.DataSource_s)
   df_tsne <- NULL
   for(i in i_s) {
-    tgt_ds <- .DataSource_s[i]
+    tgt_ds <- .DataSource_s
     sub <- .dat[.dat$DataSource == tgt_ds, ]
     
     tsne_edges <- sub
@@ -207,30 +200,28 @@ if(do_run_tsne == T){
     decoded_input <- left_join(tsne_edges, eType_tbl, by = "eType")
     decoded_output <- 
       tibble(x = tsne_obj$Y[, 1],
-           y = tsne_obj$Y[, 2],
-           eType       = decoded_input$eType,
-           eName       = decoded_input$eName.x,
-           DataSource  = decoded_input$DataSource,
-           Weight      = decoded_input$Weight,
-           Weight_unit = decoded_input$Weight_unit
-    )
+             y = tsne_obj$Y[, 2],
+             eType       = decoded_input$eType,
+             eName       = decoded_input$eName.x,
+             DataSource  = decoded_input$DataSource,
+             Weight      = decoded_input$Weight,
+             Weight_unit = decoded_input$Weight_unit
+      )
     df_tsne <- rbind(df_tsne, decoded_output)
   }
   
-  gg_tsne <- 
-    ggplot(df_tsne) +
-    geom_point(
-      aes(x = x,
-          y = y,
-          pch = DataSource,
-          col = DataSource,
-          fill = DataSource
-      ),
-      alpha = .3
-    ) + 
+  ggplot(df_tsne) +
+    geom_point(aes(x = x, y = y,
+                   pch = DataSource, col = DataSource, fill = DataSource),
+               alpha = .2, size = .5) + 
+    ggplot2::facet_grid(cols = vars(DataSource)) +
     theme_minimal() +
-    theme(legend.position = "bottom") +
-    ggplot2::facet_grid(cols = vars(DataSource))
+    theme(legend.position = "bottom",
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          legend.margin = margin(0, 0 , 0, 0),
+          legend.box.margin = margin(t = -10, r = -10, b = -5, l = -10))
   
   width_cm <- 8.4
   height_cm <- width_cm / 6
@@ -239,7 +230,7 @@ if(do_run_tsne == T){
     fn <- paste0("tSNE_", width_cm, "x", height_cm, "xx", dpi, ".png")
     ggsave(filename = fn,
            path = file.path("./output/"),
-           plot = gg_tsne,
+           plot = last_plot(),
            device = "png",
            dpi = dpi,
            units = "cm",
