@@ -11,9 +11,9 @@
   do_save_output   <- TRUE
   
   subset_nms <- c("Template", paste0("Suspect", 1:5))
-  width_cm  <- 14
-  height_cm <- 14
-  dpi <- 500
+  width_cm  <- 20
+  height_cm <- 20
+  dpi <- 300
 
   
   .template_filepath <- "./Submissions/MC1/data/CGCS-Template.csv"
@@ -55,18 +55,6 @@
     ## Must keep layout attributes:
     #str(.lay) ## Good, kept attributes
     return(.lay)
-  }
-
-  ns_decode_tsne_obj <- function(tsne_input, tsne_output){
-    decoded_input <- left_join(tsne_input, eType_tbl, by = "eType")
-    tibble(x = tsne_output$Y[, 1],
-           y = tsne_output$Y[, 2],
-           eType       = decoded_input$eType,
-           eName       = decoded_input$eName,
-           DataSource  = decoded_input$DataSource,
-           Weight      = decoded_input$Weight,
-           Weight_unit = decoded_input$Weight_unit
-    )
   }
   
 }
@@ -166,7 +154,7 @@ if(do_run_ggraph == T){
 }
 
 
-### TEMPLATE-SUSPECT EDGES tSNE =====
+### tSNE on EDGES  =====
 if(do_run_tsne == T){
   library("Rtsne")
   ## Rrmove location NULL columns
@@ -184,7 +172,7 @@ if(do_run_tsne == T){
   ## STOPPED HERE
   .dat <- select(.dat,
                  DataSource,
-                 eName,
+                 eType,
                  SecondsAfterStart,
                  NodeID,
                  Direction,
@@ -192,35 +180,19 @@ if(do_run_tsne == T){
                  Weight
   )
   .dat <- mutate(.dat,
-                 DataSource,
-                 eName = as.factor(eName),
+                 DataSource = as.factor(DataSource),
+                 eType = eType,
                  SecondsAfterStart,
                  NodeID = as.factor(NodeID),
                  Direction = as.factor(Direction),
                  Weight
   )
-
-  .dat$Direction <- as.factor(.dat$Direction)
-  .dat$eName     <- as.factor(.dat$eName)
-  .dat$DataSource <- as.factor(.dat$DataSource)
   
-  .DataSource_s <- unique(.dat$DataSource)
-  .eName_s      <- unique(.dat$eName)
-  table(.dat$eName)
-  i_s <- 1:length(.DataSource_s)
+  i_s <- 1:length(unique(.dat$DataSource))
   df_tsne <- NULL
-  if(F)
-    i<-1;
   for(i in i_s) {
-    sub <- .dat
-    sub <- sub[sub$DataSource == .DataSource_s[i],]
-    sub <- select(sub,
-                  SecondsAfterStart,
-                  NodeID,
-                  Direction,
-                  #eType,
-                  Weight
-    )
+    tgt_ds <- .DataSource_s[i]
+    sub <- .dat[.dat$DataSource == tgt_ds, ]
     
     tsne_edges <- sub
     tsne_obj <- Rtsne::Rtsne(tsne_edges, 
@@ -232,11 +204,21 @@ if(do_run_tsne == T){
                              verbose = TRUE,
                              theta = .5  ## [0, 1] increases speed at expense of accuracy
     )
-    this_tsne <- ns_decode_tsne_obj(tsne_edges, tsne_obj)
+    decoded_input <- left_join(tsne_edges, eType_tbl, by = "eType")
+    decoded_output <- 
+      tibble(x = tsne_obj$Y[, 1],
+           y = tsne_obj$Y[, 2],
+           eType       = decoded_input$eType,
+           eName       = decoded_input$eName.x,
+           DataSource  = decoded_input$DataSource,
+           Weight      = decoded_input$Weight,
+           Weight_unit = decoded_input$Weight_unit
+    )
+    df_tsne <- rbind(df_tsne, decoded_output)
   }
   
   gg_tsne <- 
-    ggplot(f_tsne_obj) +
+    ggplot(df_tsne) +
     geom_point(
       aes(x = x,
           y = y,
@@ -245,19 +227,25 @@ if(do_run_tsne == T){
           fill = DataSource
       ),
       alpha = .3
-    ) + theme_minimal() +
-    theme(legend.position = "bottom")
+    ) + 
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    ggplot2::facet_grid(cols = vars(DataSource))
   
+  width_cm <- 8.4
+  height_cm <- width_cm / 6
+  dpi <- 300
   if(do_save_output == TRUE){
-    ggsave(filename = 
-             paste0("tSNE_", width_cm, "x", height_cm / 4, ".png"),
+    fn <- paste0("tSNE_", width_cm, "x", height_cm, "xx", dpi, ".png")
+    ggsave(filename = fn,
            path = file.path("./output/"),
-           plot = last_plot(),
+           plot = gg_tsne,
            device = "png",
-           dpi = 300,
+           dpi = dpi,
            units = "cm",
            width = width_cm,
-           height = height_cm/4)
+           height = height_cm)
+    cat(paste0("NS: ggsave'd: ", fn))
   }
 }
 
