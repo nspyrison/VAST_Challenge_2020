@@ -50,4 +50,8 @@ ggplot(data = agg,
        mapping = aes(x = eName,
                      y = DataSource,
                      fill = cnt_edges)) +
-  geom_tile() + theme_minimal() + theme(legend.position = "bottom")
+  geom_tile() + 
+  theme_minimal() + 
+  theme(legend.position = "right",
+                                        axis.text.x = element_text(angle = 20)) +
+ labs(y = "Data source", x = "Edge name", fill = "Count")
