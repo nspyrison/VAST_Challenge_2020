@@ -1,8 +1,9 @@
 # VAST Challenge 2020
 
-Challenge homepage: https://vast-challenge.github.io/2020/index.html
-2020 submission: https://vast-challenge.github.io/2020/Submissions.html
-Team repo homepage: https://github.com/nspyrison/VAST_Challenge_2020/
+Challenge: https://vast-challenge.github.io/2020/index.html
+submission: https://vast-challenge.github.io/2020/Submissions.html
+Team repo: https://github.com/nspyrison/VAST_Challenge_2020/
+Over leaf: https://www.overleaf.com/7317335951tdcthscrmzfm (access required)
 
 ## If you wish to be a contributor let Nick know. Git rules:
 - Replicate the `./Data/` structure described in `./Data_readme.md`.
